@@ -1,0 +1,102 @@
+/* Custom Calendar Styling */
+.fc {
+    --fc-border-color: #e9ecef;
+    --fc-button-bg-color: #228be6;
+    --fc-button-border-color: #228be6;
+    --fc-button-hover-bg-color: #1c7ed6;
+    --fc-button-hover-border-color: #1c7ed6;
+    --fc-button-active-bg-color: #1971c2;
+    --fc-button-active-border-color: #1971c2;
+    --fc-today-bg-color: rgba(34, 139, 230, 0.05);
+}
+
+.fc .fc-button {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-transform: none;
+    border-radius: 0.25rem;
+}
+
+.fc .fc-button-primary:not(:disabled):active,
+.fc .fc-button-primary:not(:disabled).fc-button-active {
+    background-color: var(--fc-button-active-bg-color);
+    border-color: var(--fc-button-active-border-color);
+}
+
+.fc-theme-standard td,
+.fc-theme-standard th {
+    border-color: var(--fc-border-color);
+}
+
+.fc .fc-timegrid-slot {
+    height: 3em;
+}
+
+.fc-event {
+    cursor: pointer;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+}
+
+.fc-event:hover {
+    opacity: 0.85;
+}
+
+/* Light mode specific */
+@media (prefers-color-scheme: light) {
+    .fc {
+        --fc-border-color: #dee2e6;
+        --fc-neutral-bg-color: #f8f9fa;
+    }
+}
+
+/* Dark mode specific */
+@media (prefers-color-scheme: dark) {
+    .fc {
+        --fc-border-color: #373A40;
+        --fc-neutral-bg-color: #25262b;
+        --fc-page-bg-color: #1a1b1e;
+    }
+
+    .fc .fc-col-header-cell,
+    .fc .fc-timegrid-slot {
+        background-color: var(--fc-page-bg-color);
+    }
+
+    .fc .fc-scrollgrid {
+        border-color: var(--fc-border-color);
+    }
+
+    .fc th,
+    .fc td {
+        color: #c1c2c5;
+    }
+
+    .fc .fc-daygrid-day-number,
+    .fc .fc-col-header-cell-cushion {
+        color: #c1c2c5;
+    }
+}
+
+/* Custom status-based event styling */
+.fc-event-done {
+    opacity: 0.6;
+}
+
+.fc-event-doing {
+    /* Subtle pulse animation for in-progress tasks */
+    animation: pulse-border 2s ease-in-out infinite;
+}
+
+@keyframes pulse-border {
+
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 rgba(25, 113, 194, 0.7);
+    }
+
+    50% {
+        box-shadow: 0 0 0 4px rgba(25, 113, 194, 0);
+    }
+}
