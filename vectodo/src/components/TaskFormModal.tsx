@@ -30,7 +30,41 @@ interface TaskFormModalProps {
 }
 
 export function TaskFormModal({ opened, onClose, task, onUnschedule }: TaskFormModalProps) {
-    const { addTask, updateTask, deleteTask, loading } = useTaskStore();
+    const { addTask, updateTask, deleteTask, loading, tasks } = useTaskStore();
+
+    // Helper function to get all descendants of a task (recursive)
+    const getDescendants = (taskId: string): Set<string> => {
+        const descendants = new Set<string>();
+        const addChildren = (id: string) => {
+            const children = tasks.filter(t => t.parent_id === id);
+            children.forEach(child => {
+                descendants.add(child.id);
+                addChildren(child.id); // Recursive call for grandchildren
+            });
+        };
+        addChildren(taskId);
+        return descendants;
+    };
+
+    // Get available parent options (excluding self and descendants)
+    const parentOptions = [
+        { value: '', label: 'Root (最上位階層)' },
+        ...tasks
+            .filter(t => {
+                // Exclude self when editing
+                if (task && t.id === task.id) return false;
+                // Exclude descendants to prevent circular reference
+                if (task) {
+                    const descendants = getDescendants(task.id);
+                    if (descendants.has(t.id)) return false;
+                }
+                return true;
+            })
+            .map(t => ({
+                value: t.id,
+                label: t.title,
+            })),
+    ];
 
     const form = useForm({
         initialValues: {
@@ -41,6 +75,7 @@ export function TaskFormModal({ opened, onClose, task, onUnschedule }: TaskFormM
             importance: task?.importance?.toString() || null,
             planned_start: task?.planned_start ? new Date(task.planned_start) : null,
             planned_end: task?.planned_end ? new Date(task.planned_end) : null,
+            parent_id: task?.parent_id || '',
         },
         validate: {
             title: (value) => (!value || value.trim() === '' ? 'タイトルは必須です' : null),
@@ -61,6 +96,7 @@ export function TaskFormModal({ opened, onClose, task, onUnschedule }: TaskFormM
                 importance: task?.importance?.toString() || null,
                 planned_start: task?.planned_start ? new Date(task.planned_start) : null,
                 planned_end: task?.planned_end ? new Date(task.planned_end) : null,
+                parent_id: task?.parent_id || '',
             });
         }
     }, [task, opened]);
@@ -79,10 +115,13 @@ export function TaskFormModal({ opened, onClose, task, onUnschedule }: TaskFormM
             };
 
             if (task) {
-                // Update existing task
-                await updateTask(task.id, taskData);
+                // Update existing task (including parent_id)
+                await updateTask(task.id, {
+                    ...taskData,
+                    parent_id: values.parent_id || null,
+                });
             } else {
-                // Create new task
+                // Create new task (parent_id is handled automatically by store)
                 await addTask(taskData);
             }
 
@@ -172,6 +211,18 @@ export function TaskFormModal({ opened, onClose, task, onUnschedule }: TaskFormM
                         ]}
                         {...form.getInputProps('importance')}
                     />
+
+                    {/* Parent Project Selector - only show when editing */}
+                    {task && (
+                        <Select
+                            label="親タスク"
+                            placeholder="親タスクを選択（任意）"
+                            clearable
+                            searchable
+                            data={parentOptions}
+                            {...form.getInputProps('parent_id')}
+                        />
+                    )}
 
                     <DateTimePicker
                         label="開始日時 (Planned Start)"

@@ -12,21 +12,27 @@ interface TaskListProps {
 }
 
 export function TaskList({ onTaskClick }: TaskListProps) {
-    const { tasks, loading, error, fetchTasks, showCompletedTasks } = useTaskStore();
+    const { tasks, loading, error, fetchTasks, showCompletedTasks, currentProjectId } = useTaskStore();
 
     useEffect(() => {
         fetchTasks();
     }, [fetchTasks]);
 
-    // Filter out completed tasks if showCompletedTasks is false
+    // Filter with AND condition: hierarchy scope AND completion status
     const displayTasks = useMemo(() => {
-        if (showCompletedTasks) {
-            return tasks;
-        }
-        return tasks.filter(task =>
-            task.status !== 'DONE' && task.status !== 'done'
-        );
-    }, [tasks, showCompletedTasks]);
+        return tasks.filter(task => {
+            // 1. Hierarchy scope check
+            const isCorrectScope = currentProjectId
+                ? task.parent_id === currentProjectId
+                : task.parent_id === null;
+
+            // 2. Completion status check
+            const isVisibleStatus = showCompletedTasks || (task.status !== 'DONE' && task.status !== 'done');
+
+            // Both conditions must be true
+            return isCorrectScope && isVisibleStatus;
+        });
+    }, [tasks, currentProjectId, showCompletedTasks]);
 
     if (loading && tasks.length === 0) {
         return (
@@ -75,7 +81,7 @@ export function TaskList({ onTaskClick }: TaskListProps) {
                     <TaskCard
                         key={task.id}
                         task={task}
-                        onClick={() => onTaskClick?.(task)}
+                        onEdit={() => onTaskClick?.(task)}
                     />
                 ))}
             </SimpleGrid>

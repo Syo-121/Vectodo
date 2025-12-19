@@ -28,13 +28,36 @@ const nodeTypes = {
 };
 
 export function PlanningTab() {
-    const { tasks, dependencies, addDependency, removeDependency } = useTaskStore();
+    const { tasks, dependencies, addDependency, removeDependency, currentProjectId, showCompletedTasks, setCurrentProject } = useTaskStore();
     const [selectedTask, setSelectedTask] = useState<Task | null>(null);
     const [taskFormModalOpened, setTaskFormModalOpened] = useState(false);
 
-    // Convert tasks to nodes
+    // Filter tasks by current scope and completion status
+    const scopedTasks = useMemo(() => {
+        return tasks.filter(task => {
+            // 1. Hierarchy scope check
+            const isCorrectScope = currentProjectId
+                ? task.parent_id === currentProjectId
+                : task.parent_id === null;
+
+            // 2. Completion status check
+            const isVisibleStatus = showCompletedTasks || (task.status !== 'DONE' && task.status !== 'done');
+
+            return isCorrectScope && isVisibleStatus;
+        });
+    }, [tasks, currentProjectId, showCompletedTasks]);
+
+    // Filter dependencies to only those within scope
+    const scopedDependencies = useMemo(() => {
+        const scopedTaskIds = new Set(scopedTasks.map(t => t.id));
+        return dependencies.filter(dep =>
+            scopedTaskIds.has(dep.predecessor_id) && scopedTaskIds.has(dep.successor_id)
+        );
+    }, [scopedTasks, dependencies]);
+
+    // Convert scoped tasks to nodes
     const initialNodes: Node[] = useMemo(() => {
-        return tasks.map((task, index) => ({
+        return scopedTasks.map((task, index) => ({
             id: task.id,
             type: 'taskNode',
             position: { x: index * 250, y: index * 100 },
@@ -44,18 +67,18 @@ export function PlanningTab() {
                 importance: task.importance,
             },
         }));
-    }, [tasks]);
+    }, [scopedTasks]);
 
-    // Convert dependencies to edges
+    // Convert scoped dependencies to edges
     const initialEdges: Edge[] = useMemo(() => {
-        return dependencies.map((dep) => ({
+        return scopedDependencies.map((dep) => ({
             id: `${dep.predecessor_id}-${dep.successor_id}`,
             source: dep.predecessor_id,
             target: dep.successor_id,
             markerEnd: { type: MarkerType.ArrowClosed },
             animated: false,
         }));
-    }, [dependencies]);
+    }, [scopedDependencies]);
 
     const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
     const [edges, setEdges] = useEdgesState(initialEdges);
@@ -130,15 +153,13 @@ export function PlanningTab() {
     }, [nodes, edges, setNodes, setEdges]);
 
     // Node click handler
+    // Handle node click - drill down into task hierarchy
     const onNodeClick = useCallback(
         (_event: React.MouseEvent, node: Node) => {
-            const task = tasks.find(t => t.id === node.id);
-            if (task) {
-                setSelectedTask(task);
-                setTaskFormModalOpened(true);
-            }
+            // Navigate into the clicked task (drill-down)
+            setCurrentProject(node.id);
         },
-        [tasks]
+        [setCurrentProject]
     );
 
     if (tasks.length === 0) {

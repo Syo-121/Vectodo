@@ -12,42 +12,63 @@ import dayjs from 'dayjs';
 import './calendar.css';
 
 export function SchedulingTab() {
-    const { tasks, dependencies, updateTask, fetchTasks, showCompletedTasks } = useTaskStore();
+    const { tasks, dependencies, updateTask, fetchTasks, showCompletedTasks, currentProjectId } = useTaskStore();
     const [schedulingModalOpened, setSchedulingModalOpened] = useState(false);
     const [taskFormModalOpened, setTaskFormModalOpened] = useState(false);
     const [selectedTimeSlot, setSelectedTimeSlot] = useState<{ start: Date; end: Date } | null>(null);
     const [selectedTask, setSelectedTask] = useState<any>(null);
 
-    // Separate unscheduled and scheduled tasks
+    // Left side list: unscheduled tasks in current scope only
     const unscheduledTasks = useMemo(() => {
-        let unscheduled = tasks.filter(task => !task.planned_start || !task.planned_end);
+        return tasks.filter(task => {
+            // 1. Unscheduled check
+            const isUnscheduled = !task.planned_start || !task.planned_end;
 
-        // Filter out completed tasks if showCompletedTasks is false
-        if (!showCompletedTasks) {
-            unscheduled = unscheduled.filter(task =>
-                task.status !== 'DONE' && task.status !== 'done'
-            );
-        }
+            // 2. Hierarchy scope check
+            const isCorrectScope = currentProjectId
+                ? task.parent_id === currentProjectId
+                : task.parent_id === null;
 
-        return unscheduled;
-    }, [tasks, showCompletedTasks]);
+            // 3. Completion status check
+            const isVisibleStatus = showCompletedTasks || (task.status !== 'DONE' && task.status !== 'done');
 
+            return isUnscheduled && isCorrectScope && isVisibleStatus;
+        });
+    }, [tasks, currentProjectId, showCompletedTasks]);
+
+    // Calendar: scheduled tasks from all scopes (global view)
     const scheduledTasks = useMemo(() => {
-        let scheduled = tasks.filter(task => task.planned_start && task.planned_end);
+        return tasks.filter(task => {
+            // 1. Scheduled check
+            const isScheduled = task.planned_start && task.planned_end;
 
-        // Filter out completed tasks if showCompletedTasks is false
-        if (!showCompletedTasks) {
-            scheduled = scheduled.filter(task =>
-                task.status !== 'DONE' && task.status !== 'done'
-            );
-        }
+            // 2. Completion status check (no scope filtering for calendar)
+            const isVisibleStatus = showCompletedTasks || (task.status !== 'DONE' && task.status !== 'done');
 
-        return scheduled;
+            return isScheduled && isVisibleStatus;
+        });
     }, [tasks, showCompletedTasks]);
+
+    // Left sidebar: scheduled tasks in current scope only (for the list)
+    const scopedScheduledTasks = useMemo(() => {
+        return scheduledTasks.filter(task => {
+            // Hierarchy scope check for sidebar list
+            const isCorrectScope = currentProjectId
+                ? task.parent_id === currentProjectId
+                : task.parent_id === null;
+
+            return isCorrectScope;
+        });
+    }, [scheduledTasks, currentProjectId]);
 
     // Map scheduled tasks to calendar events
     const events = useMemo(() => {
         return scheduledTasks.map(task => {
+            // Check if task is in current scope
+            const isInCurrentScope = currentProjectId
+                ? task.parent_id === currentProjectId
+                : task.parent_id === null;
+
             // Check task status
             const isDone = task.status === 'DONE' || task.status === 'done';
             const isDoing = task.status === 'DOING' || task.status === 'doing';
@@ -87,6 +108,12 @@ export function SchedulingTab() {
                 textColor = '#ffffff';
             }
 
+            // Reduce opacity for out-of-scope tasks (40% opacity)
+            if (!isInCurrentScope) {
+                backgroundColor = backgroundColor + '66';
+                borderColor = borderColor + '66';
+            }
+
             return {
                 id: task.id,
                 title: task.title,
@@ -102,10 +129,11 @@ export function SchedulingTab() {
                     warningMessages: warnings.map(w => w.reason),
                     isDone,
                     isDoing,
+                    isInCurrentScope,
                 },
             };
         });
-    }, [scheduledTasks, tasks, dependencies]);
+    }, [scheduledTasks, tasks, dependencies, currentProjectId]);
 
     // Handle time slot selection (for scheduling unscheduled tasks)
     const handleSelect = (selectInfo: DateSelectArg) => {
@@ -221,10 +249,10 @@ export function SchedulingTab() {
                         </Text>
                         <ScrollArea h="calc(50vh - 150px)">
                             <Stack gap="xs">
-                                {scheduledTasks.length === 0 ? (
+                                {scopedScheduledTasks.length === 0 ? (
                                     <Text c="dimmed" size="sm">スケジュール済みのタスクはありません</Text>
                                 ) : (
-                                    scheduledTasks.map((task) => (
+                                    scopedScheduledTasks.map((task) => (
                                         <Paper
                                             key={task.id}
                                             p="xs"

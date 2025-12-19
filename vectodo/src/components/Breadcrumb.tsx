@@ -1,31 +1,52 @@
-import { Breadcrumbs, Anchor } from '@mantine/core';
+import { Fragment, useMemo } from 'react';
+import { Group, Text, ActionIcon } from '@mantine/core';
 import { Home } from 'lucide-react';
 import { useTaskStore } from '../stores/taskStore';
 
 export function Breadcrumb() {
-    const { currentProjectId, setCurrentProject, getProjectPath } = useTaskStore();
-    const path = getProjectPath(currentProjectId);
+    const { tasks, currentProjectId, setCurrentProject } = useTaskStore();
+
+    // Generate path from currentProjectId to root
+    const path = useMemo(() => {
+        const result: typeof tasks = [];
+        let currentId = currentProjectId;
+
+        while (currentId) {
+            const task = tasks.find(t => t.id === currentId);
+            if (!task) break;
+            result.unshift(task); // Add to beginning
+            currentId = task.parent_id;
+        }
+
+        return result;
+    }, [tasks, currentProjectId]);
+
+    // Don't show breadcrumb if at root
+    if (!currentProjectId) return null;
 
     return (
-        <Breadcrumbs separator="›">
-            <Anchor
+        <Group gap="xs">
+            <ActionIcon
+                variant="subtle"
+                size="sm"
                 onClick={() => setCurrentProject(null)}
-                style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
-                c={currentProjectId === null ? 'blue' : 'dimmed'}
+                title="ホームに戻る"
             >
                 <Home size={16} />
-                <span>ホーム</span>
-            </Anchor>
+            </ActionIcon>
             {path.map((task, index) => (
-                <Anchor
-                    key={task.id}
-                    onClick={() => setCurrentProject(task.id)}
-                    style={{ cursor: 'pointer' }}
-                    c={index === path.length - 1 ? 'blue' : 'dimmed'}
-                >
-                    {task.title}
-                </Anchor>
+                <Fragment key={task.id}>
+                    <Text c="dimmed" size="sm">/</Text>
+                    <Text
+                        size="sm"
+                        style={{ cursor: 'pointer' }}
+                        c={index === path.length - 1 ? 'blue' : 'dimmed'}
+                        onClick={() => setCurrentProject(task.id)}
+                    >
+                        {task.title}
+                    </Text>
+                </Fragment>
             ))}
-        </Breadcrumbs>
+        </Group>
     );
 }

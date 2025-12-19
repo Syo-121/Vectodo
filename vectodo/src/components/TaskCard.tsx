@@ -1,5 +1,5 @@
 import { Card, Text, Badge, Group, Stack, Checkbox, ActionIcon, Menu } from '@mantine/core';
-import { Clock, AlertCircle, Play, Circle } from 'lucide-react';
+import { Clock, AlertCircle, Play, Circle, Edit, Folder } from 'lucide-react';
 import { useTaskStore } from '../stores/taskStore';
 import type { Tables } from '../supabase-types';
 
@@ -7,13 +7,16 @@ type Task = Tables<'tasks'>;
 
 interface TaskCardProps {
     task: Task;
-    onClick?: () => void;
+    onEdit?: () => void;
 }
 
-export function TaskCard({ task, onClick }: TaskCardProps) {
-    const { updateTaskStatus, startTimer, activeTaskId } = useTaskStore();
+export function TaskCard({ task, onEdit }: TaskCardProps) {
+    const { updateTaskStatus, startTimer, activeTaskId, setCurrentProject, tasks } = useTaskStore();
     const isDone = task.status === 'DONE' || task.status === 'done';
     const isActive = activeTaskId === task.id;
+
+    // Count subtasks
+    const subtaskCount = tasks.filter(t => t.parent_id === task.id).length;
 
     const getStatusColor = (status: string | null) => {
         const statusUpper = status?.toUpperCase();
@@ -52,6 +55,16 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
         await startTimer(task.id);
     };
 
+    const handleCardClick = () => {
+        // Drill down into this task's hierarchy
+        setCurrentProject(task.id);
+    };
+
+    const handleEditClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        onEdit?.();
+    };
+
     return (
         <Card
             shadow="sm"
@@ -63,7 +76,7 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
                 opacity: isDone ? 0.7 : 1,
                 transition: 'all 0.2s ease',
             }}
-            onClick={onClick}
+            onClick={handleCardClick}
         >
             <Group wrap="nowrap" align="flex-start">
                 {/* Checkbox */}
@@ -111,53 +124,79 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
                             )}
 
                             {/* Title */}
-                            <Text fw={500} size="lg" td={isDone ? 'line-through' : 'none'}>
-                                {task.title}
-                            </Text>
+                            <Group gap="xs">
+                                <Text fw={500} size="lg" td={isDone ? 'line-through' : 'none'}>
+                                    {task.title}
+                                </Text>
+                                {/* Subtask count badge */}
+                                {subtaskCount > 0 && (
+                                    <Badge
+                                        color="blue"
+                                        variant="light"
+                                        size="sm"
+                                        leftSection={<Folder size={12} />}
+                                    >
+                                        {subtaskCount}
+                                    </Badge>
+                                )}
+                            </Group>
                         </Group>
 
-                        {/* Status Badge */}
-                        {!isDone && (
-                            <div onClick={(e) => e.stopPropagation()}>
-                                <Menu position="bottom-end" withinPortal>
-                                    <Menu.Target>
-                                        <Badge
-                                            color={getStatusColor(task.status)}
-                                            variant="light"
-                                            style={{ cursor: 'pointer' }}
-                                        >
-                                            {getStatusLabel(task.status)}
-                                        </Badge>
-                                    </Menu.Target>
-                                    <Menu.Dropdown>
-                                        <Menu.Item onClick={async (e) => {
-                                            e.stopPropagation();
-                                            await updateTaskStatus(task.id, 'TODO');
-                                        }}>
-                                            未着手
-                                        </Menu.Item>
-                                        <Menu.Item onClick={async (e) => {
-                                            e.stopPropagation();
-                                            await updateTaskStatus(task.id, 'DOING');
-                                        }}>
-                                            進行中
-                                        </Menu.Item>
-                                        <Menu.Item onClick={async (e) => {
-                                            e.stopPropagation();
-                                            await updateTaskStatus(task.id, 'DONE');
-                                        }}>
-                                            完了
-                                        </Menu.Item>
-                                        <Menu.Item onClick={async (e) => {
-                                            e.stopPropagation();
-                                            await updateTaskStatus(task.id, 'PENDING');
-                                        }}>
-                                            保留
-                                        </Menu.Item>
-                                    </Menu.Dropdown>
-                                </Menu>
-                            </div>
-                        )}
+                        <Group gap="xs">
+                            {/* Edit Button */}
+                            <ActionIcon
+                                variant="subtle"
+                                color="gray"
+                                size="sm"
+                                onClick={handleEditClick}
+                                title="編集"
+                            >
+                                <Edit size={16} />
+                            </ActionIcon>
+
+                            {/* Status Badge */}
+                            {!isDone && (
+                                <div onClick={(e) => e.stopPropagation()}>
+                                    <Menu position="bottom-end" withinPortal>
+                                        <Menu.Target>
+                                            <Badge
+                                                color={getStatusColor(task.status)}
+                                                variant="light"
+                                                style={{ cursor: 'pointer' }}
+                                            >
+                                                {getStatusLabel(task.status)}
+                                            </Badge>
+                                        </Menu.Target>
+                                        <Menu.Dropdown>
+                                            <Menu.Item onClick={async (e) => {
+                                                e.stopPropagation();
+                                                await updateTaskStatus(task.id, 'TODO');
+                                            }}>
+                                                未着手
+                                            </Menu.Item>
+                                            <Menu.Item onClick={async (e) => {
+                                                e.stopPropagation();
+                                                await updateTaskStatus(task.id, 'DOING');
+                                            }}>
+                                                進行中
+                                            </Menu.Item>
+                                            <Menu.Item onClick={async (e) => {
+                                                e.stopPropagation();
+                                                await updateTaskStatus(task.id, 'DONE');
+                                            }}>
+                                                完了
+                                            </Menu.Item>
+                                            <Menu.Item onClick={async (e) => {
+                                                e.stopPropagation();
+                                                await updateTaskStatus(task.id, 'PENDING');
+                                            }}>
+                                                保留
+                                            </Menu.Item>
+                                        </Menu.Dropdown>
+                                    </Menu>
+                                </div>
+                            )}
+                        </Group>
                     </Group>
 
                     {task.description && (
