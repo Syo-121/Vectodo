@@ -7,6 +7,9 @@ import { Grid, Stack, Text, ScrollArea, Paper, Tooltip } from '@mantine/core';
 import { useTaskStore } from '../../stores/taskStore';
 import { SchedulingModal } from './SchedulingModal';
 import { TaskFormModal } from '../../components/TaskFormModal';
+import { GoogleConnectButton } from '../../components/GoogleConnectButton';
+import { CalendarSelector } from '../../components/CalendarSelector';
+import { useGoogleCalendar } from '../../hooks/useGoogleCalendar';
 import { getDependencyWarnings } from '../../utils/dependencyCheck';
 import dayjs from 'dayjs';
 import './calendar.css';
@@ -17,6 +20,15 @@ export function SchedulingTab() {
     const [taskFormModalOpened, setTaskFormModalOpened] = useState(false);
     const [selectedTimeSlot, setSelectedTimeSlot] = useState<{ start: Date; end: Date } | null>(null);
     const [selectedTask, setSelectedTask] = useState<any>(null);
+
+    // Google Calendar integration
+    const {
+        events: googleEvents,
+        loading: googleLoading,
+        calendars,
+        selectedCalendarIds,
+        setSelectedCalendarIds,
+    } = useGoogleCalendar();
 
     // Left side list: unscheduled tasks in current scope only
     const unscheduledTasks = useMemo(() => {
@@ -134,6 +146,18 @@ export function SchedulingTab() {
             };
         });
     }, [scheduledTasks, tasks, dependencies, currentProjectId]);
+
+    // Merge Vectodo tasks and Google Calendar events
+    const allEvents = useMemo(() => {
+        console.log('[SchedulingTab] Merging events:', {
+            vectodoEvents: events.length,
+            googleEvents: googleEvents.length,
+        });
+        // Safe array spread - works even if googleEvents is empty
+        const merged = [...events, ...googleEvents];
+        console.log('[SchedulingTab] Total merged events:', merged.length);
+        return merged;
+    }, [events, googleEvents]);
 
     // Handle time slot selection (for scheduling unscheduled tasks)
     const handleSelect = (selectInfo: DateSelectArg) => {
@@ -277,6 +301,30 @@ export function SchedulingTab() {
                             </Stack>
                         </ScrollArea>
                     </Paper>
+
+                    {/* Google Calendar Section */}
+                    <Paper withBorder p="md">
+                        <Text fw={500} size="lg" mb="sm">
+                            Googleカレンダー連携
+                        </Text>
+                        <GoogleConnectButton />
+
+                        {/* Calendar Selector - show when logged in and calendars are available */}
+                        {calendars.length > 0 && (
+                            <>
+                                <Text size="sm" fw={500} mt="md" mb="xs">
+                                    表示するカレンダー
+                                </Text>
+                                <CalendarSelector
+                                    calendars={calendars}
+                                    selectedIds={selectedCalendarIds}
+                                    onChange={setSelectedCalendarIds}
+                                />
+                            </>
+                        )}
+
+                        {googleLoading && <Text size="sm" c="dimmed" mt="xs">読み込み中...</Text>}
+                    </Paper>
                 </Stack>
             </Grid.Col>
 
@@ -300,7 +348,7 @@ export function SchedulingTab() {
                     eventDrop={handleEventDrop}
                     eventResize={handleEventResize}
                     eventClick={handleEventClick}
-                    events={events}
+                    events={allEvents}
                     eventContent={renderEventContent}
                     locale="ja"
                     buttonText={{
