@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+﻿import { create } from 'zustand';
 import { supabase } from '../lib/supabaseClient';
 import type { Tables } from '../supabase-types';
 import { createGoogleEvent, updateGoogleEvent, deleteGoogleEvent } from '../utils/googleCalendarSync';
@@ -31,6 +31,7 @@ interface TaskStore {
     timerStartTime: string | null;
     showCompletedTasks: boolean;
     currentProjectId: string | null;
+    targetCalendarId: string;
     fetchTasks: () => Promise<void>;
     fetchDependencies: () => Promise<void>;
     addTask: (taskData: TaskData) => Promise<void>;
@@ -42,6 +43,7 @@ interface TaskStore {
     getCurrentTimerElapsed: () => number;
     toggleShowCompletedTasks: () => void;
     setCurrentProject: (id: string | null) => void;
+    setTargetCalendarId: (id: string) => void;
     addDependency: (predecessorId: string, successorId: string) => Promise<void>;
     removeDependency: (predecessorId: string, successorId: string) => Promise<void>;
 }
@@ -99,14 +101,50 @@ const initialShowCompleted = loadShowCompletedSetting();
 // Load current project from localStorage
 const loadCurrentProject = (): string | null => {
     try {
-        return localStorage.getItem('vectodo-current-project');
+        const saved = localStorage.getItem('vectodo-current-project');
+        return saved || null;
     } catch (error) {
         console.error('Failed to load current project:', error);
         return null;
     }
 };
 
+// Save current project to localStorage
+const saveCurrentProject = (id: string | null) => {
+    try {
+        if (id) {
+            localStorage.setItem('vectodo-current-project', id);
+        } else {
+            localStorage.removeItem('vectodo-current-project');
+        }
+    } catch (error) {
+        console.error('Failed to save current project:', error);
+    }
+};
+
 const initialCurrentProject = loadCurrentProject();
+
+// Load target calendar ID from localStorage
+const loadTargetCalendarId = (): string => {
+    try {
+        const saved = localStorage.getItem('vectodo-target-calendar');
+        return saved || 'primary';
+    } catch (error) {
+        console.error('Failed to load target calendar:', error);
+        return 'primary';
+    }
+};
+
+// Save target calendar ID to localStorage
+const saveTargetCalendarId = (id: string) => {
+    try {
+        localStorage.setItem('vectodo-target-calendar', id);
+    } catch (error) {
+        console.error('Failed to save target calendar:', error);
+    }
+};
+
+const initialTargetCalendar = loadTargetCalendarId();
 
 export const useTaskStore = create<TaskStore>((set, get) => ({
     tasks: [],
@@ -117,6 +155,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     timerStartTime: initialTimerState.timerStartTime,
     showCompletedTasks: initialShowCompleted,
     currentProjectId: initialCurrentProject,
+    targetCalendarId: initialTargetCalendar,
 
     fetchTasks: async () => {
         set({ loading: true, error: null });
@@ -206,17 +245,22 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
 
                 if (session?.provider_token && (data.planned_start || data.planned_end || data.deadline)) {
                     console.log('📅 [Task Store] Date exists, starting Google sync...');
-                    const googleEventId = await createGoogleEvent(data, session);
+                    const { targetCalendarId } = get();
+                    const googleEventId = await createGoogleEvent(data, targetCalendarId, session);
 
                     if (googleEventId) {
-                        // Update task with google_event_id
+                        // Update task with google_event_id and google_calendar_id
                         const { error: updateError } = await supabase
                             .from('tasks')
-                            .update({ google_event_id: googleEventId })
+                            .update({
+                                google_event_id: googleEventId,
+                                google_calendar_id: targetCalendarId
+                            })
                             .eq('id', data.id);
 
                         if (!updateError) {
                             data.google_event_id = googleEventId;
+                            data.google_calendar_id = targetCalendarId;
                             console.log('✅ [Task Store] Google sync successful! Event ID:', googleEventId);
                         } else {
                             console.error('❌ [Task Store] Failed to save google_event_id:', updateError);
@@ -304,22 +348,26 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
                 // Pattern A: New sync (no google_event_id but has date) - CREATE
                 if (!data.google_event_id && hasDate) {
                     console.log('🆕 [Task Store] Task scheduled for first time. Creating Google event...');
-                    const googleEventId = await createGoogleEvent(data, session);
+                    const { targetCalendarId } = get();
+                    const googleEventId = await createGoogleEvent(data, targetCalendarId, session);
 
                     if (googleEventId) {
                         console.log('✅ [Task Store] Event created! Saving ID:', googleEventId);
 
-                        // Update DB with google_event_id
+                        // Update DB with google_event_id and google_calendar_id
                         const { error: updateError } = await supabase
                             .from('tasks')
-                            .update({ google_event_id: googleEventId })
+                            .update({
+                                google_event_id: googleEventId,
+                                google_calendar_id: targetCalendarId
+                            })
                             .eq('id', taskId);
 
                         if (!updateError) {
                             // Update store
                             set((state) => ({
                                 tasks: state.tasks.map((t) =>
-                                    t.id === taskId ? { ...t, google_event_id: googleEventId } : t
+                                    t.id === taskId ? { ...t, google_event_id: googleEventId, google_calendar_id: targetCalendarId } : t
                                 ),
                             }));
                             console.log('✅ [Task Store] google_event_id saved successfully');
@@ -333,24 +381,26 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
                 // Pattern B: Update existing event (has google_event_id and has date) - UPDATE
                 else if (data.google_event_id && hasDate) {
                     console.log('📝 [Task Store] Updating existing Google event...');
-                    await updateGoogleEvent(data, data.google_event_id, session);
+                    const calendarId = data.google_calendar_id || 'primary';
+                    await updateGoogleEvent(data, data.google_event_id, calendarId, session);
                 }
                 // Pattern C: Delete event (has google_event_id but no date) - DELETE
                 else if (data.google_event_id && !hasDate) {
                     console.log('🗑️ [Task Store] Date removed. Deleting Google event...');
-                    await deleteGoogleEvent(data.google_event_id, session);
+                    const calendarId = data.google_calendar_id || 'primary';
+                    await deleteGoogleEvent(data.google_event_id, calendarId, session);
 
                     // Clear google_event_id from DB
                     const { error: clearError } = await supabase
                         .from('tasks')
-                        .update({ google_event_id: null })
+                        .update({ google_event_id: null, google_calendar_id: null })
                         .eq('id', taskId);
 
                     if (!clearError) {
                         // Update store
                         set((state) => ({
                             tasks: state.tasks.map((t) =>
-                                t.id === taskId ? { ...t, google_event_id: null } : t
+                                t.id === taskId ? { ...t, google_event_id: null, google_calendar_id: null } : t
                             ),
                         }));
                         console.log('✅ [Task Store] google_event_id cleared');
@@ -389,7 +439,8 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
                     const { data: { session } } = await supabase.auth.getSession();
                     if (session?.provider_token) {
                         console.log('[Task Store] Deleting event from Google Calendar...');
-                        await deleteGoogleEvent(task.google_event_id, session);
+                        const calendarId = task.google_calendar_id || 'primary';
+                        await deleteGoogleEvent(task.google_event_id, calendarId, session);
                     }
                 } catch (syncError) {
                     console.error('[Task Store] Google Calendar sync failed:', syncError);
@@ -570,16 +621,12 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
 
     setCurrentProject: (id: string | null) => {
         set({ currentProjectId: id });
-        // Persist to localStorage
-        try {
-            if (id) {
-                localStorage.setItem('vectodo-current-project', id);
-            } else {
-                localStorage.removeItem('vectodo-current-project');
-            }
-        } catch (error) {
-            console.error('Failed to save current project:', error);
-        }
+        saveCurrentProject(id);
+    },
+
+    setTargetCalendarId: (id: string) => {
+        set({ targetCalendarId: id });
+        saveTargetCalendarId(id);
     },
 }));
 
