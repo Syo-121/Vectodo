@@ -124,9 +124,22 @@ export function TaskCard({ task, onEdit }: TaskCardProps) {
                             )}
 
                             {/* Title */}
-                            <Text fw={500} size="lg" td={isDone ? 'line-through' : 'none'}>
-                                {task.title}
-                            </Text>
+                            <Group gap="xs">
+                                <Text fw={500} size="lg" td={isDone ? 'line-through' : 'none'}>
+                                    {task.title}
+                                </Text>
+                                {/* Subtask count badge */}
+                                {subtaskCount > 0 && (
+                                    <Badge
+                                        color="blue"
+                                        variant="light"
+                                        size="sm"
+                                        leftSection={<Folder size={12} />}
+                                    >
+                                        {subtaskCount}
+                                    </Badge>
+                                )}
+                            </Group>
                         </Group>
 
                         <Group gap="xs">
