@@ -28,7 +28,7 @@ const nodeTypes = {
 };
 
 export function PlanningTab() {
-    const { tasks, dependencies, addDependency, removeDependency, currentProjectId, showCompletedTasks } = useTaskStore();
+    const { tasks, dependencies, addDependency, removeDependency, currentProjectId, showCompletedTasks, setCurrentProject } = useTaskStore();
     const [selectedTask, setSelectedTask] = useState<Task | null>(null);
     const [taskFormModalOpened, setTaskFormModalOpened] = useState(false);
 
@@ -153,15 +153,13 @@ export function PlanningTab() {
     }, [nodes, edges, setNodes, setEdges]);
 
     // Node click handler
+    // Handle node click - drill down into task hierarchy
     const onNodeClick = useCallback(
         (_event: React.MouseEvent, node: Node) => {
-            const task = tasks.find(t => t.id === node.id);
-            if (task) {
-                setSelectedTask(task);
-                setTaskFormModalOpened(true);
-            }
+            // Navigate into the clicked task (drill-down)
+            setCurrentProject(node.id);
         },
-        [tasks]
+        [setCurrentProject]
     );
 
     if (tasks.length === 0) {
