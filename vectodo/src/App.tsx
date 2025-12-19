@@ -4,7 +4,7 @@ import './notifications.css';
 import { useState } from 'react';
 import { MantineProvider, AppShell, Stack, Button, Tabs } from '@mantine/core';
 import { ModalsProvider } from '@mantine/modals';
-import { Notifications, notifications } from '@mantine/notifications';
+import { Notifications } from '@mantine/notifications';
 import { Plus, List, Calendar, Network } from 'lucide-react';
 import { Header } from './components/Header';
 import { TaskList } from './components/TaskList';
@@ -64,23 +64,6 @@ function App() {
                 style={{ maxWidth: '200px' }}
               >
                 新規タスク作成
-              </Button>
-
-              {/* Test notification button */}
-              <Button
-                onClick={() => {
-                  console.log('[TEST] Calling notifications.show() directly');
-                  notifications.show({
-                    title: 'テスト通知',
-                    message: 'Mantine Notificationsが動作しています！',
-                    color: 'blue',
-                  });
-                }}
-                variant="outline"
-                size="sm"
-                style={{ maxWidth: '200px' }}
-              >
-                通知テスト
               </Button>
 
               <Tabs value={activeTab} onChange={setActiveTab}>
