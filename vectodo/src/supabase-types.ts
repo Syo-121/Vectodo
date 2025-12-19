@@ -88,6 +88,8 @@ export type Database = {
           status: string | null
           title: string
           urgency: number | null
+          google_event_id: string | null
+          google_calendar_id: string | null
         }
         Insert: {
           actual_minutes?: number | null
@@ -105,6 +107,8 @@ export type Database = {
           status?: string | null
           title: string
           urgency?: number | null
+          google_event_id?: string | null
+          google_calendar_id?: string | null
         }
         Update: {
           actual_minutes?: number | null
@@ -122,6 +126,8 @@ export type Database = {
           status?: string | null
           title?: string
           urgency?: number | null
+          google_event_id?: string | null
+          google_calendar_id?: string | null
         }
         Relationships: [
           {

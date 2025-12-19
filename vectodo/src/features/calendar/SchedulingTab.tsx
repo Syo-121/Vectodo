@@ -9,6 +9,7 @@ import { SchedulingModal } from './SchedulingModal';
 import { TaskFormModal } from '../../components/TaskFormModal';
 import { GoogleConnectButton } from '../../components/GoogleConnectButton';
 import { CalendarSelector } from '../../components/CalendarSelector';
+import { CalendarTargetSelector } from '../../components/CalendarTargetSelector';
 import { useGoogleCalendar } from '../../hooks/useGoogleCalendar';
 import { getDependencyWarnings } from '../../utils/dependencyCheck';
 import dayjs from 'dayjs';
@@ -307,6 +308,10 @@ export function SchedulingTab() {
                         <Text fw={500} size="lg" mb="sm">
                             Googleカレンダー連携
                         </Text>
+
+                        {/* Calendar Target Selector */}
+                        <CalendarTargetSelector />
+
                         <GoogleConnectButton />
 
                         {/* Calendar Selector - show when logged in and calendars are available */}
