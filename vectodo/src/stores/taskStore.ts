@@ -2,6 +2,7 @@
 import { supabase } from '../lib/supabaseClient';
 import type { Tables } from '../supabase-types';
 import { createGoogleEvent, updateGoogleEvent, deleteGoogleEvent } from '../utils/googleCalendarSync';
+import { useToastStore } from './useToastStore';
 
 type Task = Tables<'tasks'>;
 
@@ -262,6 +263,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
                             data.google_event_id = googleEventId;
                             data.google_calendar_id = targetCalendarId;
                             console.log('✅ [Task Store] Google sync successful! Event ID:', googleEventId);
+                            useToastStore.getState().addToast('Googleカレンダーに同期しました', 'success');
                         } else {
                             console.error('❌ [Task Store] Failed to save google_event_id:', updateError);
                         }
@@ -278,6 +280,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
             } catch (syncError) {
                 // Sync errors should not block task creation
                 console.error('❌ [Task Store] Google Calendar sync failed:', syncError);
+                useToastStore.getState().addToast('Google同期に失敗しました', 'error');
             }
 
             // Add the new task to the beginning of the list
@@ -285,6 +288,10 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
                 tasks: [data, ...state.tasks],
                 loading: false,
             }));
+
+            // Show success toast
+            console.log('[DEBUG] About to show task creation success toast');
+            useToastStore.getState().addToast('タスクを作成しました', 'success');
         } catch (error: any) {
             const errorMessage = error?.message || 'Failed to add task';
             const errorDetails = error?.details || '';
@@ -298,6 +305,10 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
                 error: fullError,
                 loading: false
             });
+
+            // Show error toast
+            console.log('[DEBUG] Showing error toast for task creation');
+            useToastStore.getState().addToast(`エラー: ${errorMessage}`, 'error');
         }
     },
 
@@ -324,6 +335,9 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
                 ),
                 loading: false,
             }));
+
+            // Show success toast
+            useToastStore.getState().addToast('タスクを更新しました', 'success');
 
             // Google Calendar Sync - handle all patterns
             console.log('🔄 [Task Store] Checking Google sync for updated task:', data.title);
@@ -414,14 +428,13 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
                 }
             } catch (syncError) {
                 console.error('❌ [Task Store] Google Calendar sync failed:', syncError);
+                useToastStore.getState().addToast('Google同期に失敗しました', 'error');
             }
         } catch (error: any) {
             const errorMessage = error?.message || 'Failed to update task';
-            console.error('Update error:', errorMessage, error);
-            set({
-                error: errorMessage,
-                loading: false
-            });
+            console.error('Failed to update task:', error);
+            set({ error: errorMessage, loading: false });
+            useToastStore.getState().addToast(`エラー: ${errorMessage}`, 'error');
         }
     },
 
@@ -456,11 +469,14 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
 
             console.log('Task deleted successfully');
 
-            // Remove the task from the list
+            // Remove from state
             set((state) => ({
-                tasks: state.tasks.filter((task) => task.id !== taskId),
+                tasks: state.tasks.filter((t) => t.id !== taskId),
                 loading: false,
             }));
+
+            // Show success toast
+            useToastStore.getState().addToast('タスクを削除しました', 'success');
         } catch (error: any) {
             const errorMessage = error?.message || 'Failed to delete task';
             console.error('Delete error:', errorMessage, error);
@@ -495,8 +511,9 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
                     { predecessor_id: predecessorId, successor_id: successorId },
                 ],
             }));
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to add dependency:', error);
+            useToastStore.getState().addToast(`エラー: ${error.message}`, 'error');
         }
     },
 

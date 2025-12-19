@@ -9,8 +9,8 @@ export function Header() {
 
     return (
         <Group
+            h={60}
             px="md"
-            py="lg"
             justify="space-between"
             style={(theme) => ({
                 borderBottom: `1px solid ${theme.colors.dark[4]}`,

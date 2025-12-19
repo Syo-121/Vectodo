@@ -1,0 +1,13 @@
+/* Global styles for Mantine Notifications positioning fix */
+.mantine-Notifications-root {
+    position: fixed !important;
+    top: 70px !important;
+    right: 20px !important;
+    z-index: 10000 !important;
+    width: auto !important;
+    max-width: 420px !important;
+}
+
+.mantine-Notification-root {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}

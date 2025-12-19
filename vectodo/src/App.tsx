@@ -1,8 +1,10 @@
 import '@mantine/core/styles.css';
 import '@mantine/dates/styles.css';
+import './notifications.css';
 import { useState } from 'react';
 import { MantineProvider, AppShell, Stack, Button, Tabs } from '@mantine/core';
 import { ModalsProvider } from '@mantine/modals';
+import { Notifications, notifications } from '@mantine/notifications';
 import { Plus, List, Calendar, Network } from 'lucide-react';
 import { Header } from './components/Header';
 import { TaskList } from './components/TaskList';
@@ -10,6 +12,7 @@ import { TaskFormModal } from './components/TaskFormModal';
 import { ActiveTaskWidget } from './components/ActiveTaskWidget';
 import { SchedulingTab } from './features/calendar/SchedulingTab';
 import { PlanningTab } from './features/planning/PlanningTab';
+import { ToastContainer } from './components/ToastContainer';
 import type { Tables } from './supabase-types';
 
 type Task = Tables<'tasks'>;
@@ -36,14 +39,24 @@ function App() {
 
   return (
     <MantineProvider defaultColorScheme="auto">
+      {/* Notifications at top level for proper z-index layering */}
+      <Notifications
+        position="top-right"
+        zIndex={10000}
+        containerWidth={420}
+        limit={5}
+      />
       <ModalsProvider>
-        <AppShell header={{ height: 70 }} padding="md">
+        <AppShell
+          header={{ height: 60 }}
+          padding={0}
+        >
           <AppShell.Header>
             <Header />
           </AppShell.Header>
 
           <AppShell.Main>
-            <Stack gap="lg" px="xl" py="md">
+            <Stack gap="lg" p="md">
               <Button
                 leftSection={<Plus size={20} />}
                 onClick={handleNewTask}
@@ -51,6 +64,23 @@ function App() {
                 style={{ maxWidth: '200px' }}
               >
                 新規タスク作成
+              </Button>
+
+              {/* Test notification button */}
+              <Button
+                onClick={() => {
+                  console.log('[TEST] Calling notifications.show() directly');
+                  notifications.show({
+                    title: 'テスト通知',
+                    message: 'Mantine Notificationsが動作しています！',
+                    color: 'blue',
+                  });
+                }}
+                variant="outline"
+                size="sm"
+                style={{ maxWidth: '200px' }}
+              >
+                通知テスト
               </Button>
 
               <Tabs value={activeTab} onChange={setActiveTab}>
@@ -90,6 +120,9 @@ function App() {
           onClose={handleModalClose}
           task={editingTask}
         />
+
+        {/* Toast Notifications */}
+        <ToastContainer />
       </ModalsProvider>
     </MantineProvider>
   );
