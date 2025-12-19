@@ -153,23 +153,22 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     addTask: async (taskData: TaskData) => {
         set({ loading: true, error: null });
         try {
-            // Generate a simple slug from title
-            const slug = taskData.title
-                .toLowerCase()
-                .replace(/[^a-z0-9]+/g, '-')
-                .replace(/(^-|-$)/g, '');
+            // Generate unique slug based on global maximum across ALL tasks
+            const allTasks = get().tasks;
+            const maxSlug = allTasks.reduce((max, task) => {
+                const slugNum = parseInt(task.slug, 10);
+                return (!isNaN(slugNum) && slugNum > max) ? slugNum : max;
+            }, 0);
+            const newSlug = String(maxSlug + 1);
 
-            // If slug is empty (e.g., Japanese title), use timestamp
-            const finalSlug = slug || `task-${Date.now()}`;
-
-            console.log('Creating task with:', { ...taskData, slug: finalSlug });
+            console.log('Creating task with slug:', newSlug);
 
             const { currentProjectId } = get();
             const { data, error } = await supabase
                 .from('tasks')
                 .insert({
                     title: taskData.title,
-                    slug: finalSlug,
+                    slug: newSlug,
                     project_id: taskData.project_id,
                     parent_id: currentProjectId,
                     estimate_minutes: taskData.estimate_minutes,
