@@ -47,6 +47,8 @@ interface TaskStore {
     setTargetCalendarId: (id: string) => void;
     addDependency: (predecessorId: string, successorId: string) => Promise<void>;
     removeDependency: (predecessorId: string, successorId: string) => Promise<void>;
+    deleteTasks: (ids: string[]) => Promise<void>;
+    completeTasks: (ids: string[], isCompleted: boolean) => Promise<void>;
 }
 
 // Load timer state from localStorage
@@ -644,6 +646,74 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     setTargetCalendarId: (id: string) => {
         set({ targetCalendarId: id });
         saveTargetCalendarId(id);
+    },
+
+    // Bulk delete tasks
+    deleteTasks: async (ids: string[]) => {
+        if (ids.length === 0) return;
+
+        set({ loading: true, error: null });
+        try {
+            console.log(`[Bulk Delete] Deleting ${ids.length} tasks:`, ids);
+
+            const { error } = await supabase
+                .from('tasks')
+                .delete()
+                .in('id', ids);
+
+            if (error) throw error;
+
+            // Remove from state
+            set((state) => ({
+                tasks: state.tasks.filter((t) => !ids.includes(t.id)),
+                loading: false,
+            }));
+
+            // Show success toast
+            useToastStore.getState().addToast(`${ids.length}件のタスクを削除しました`, 'success');
+            console.log(`[Bulk Delete] Successfully deleted ${ids.length} tasks`);
+        } catch (error: any) {
+            const errorMessage = error?.message || 'Failed to delete tasks';
+            console.error('[Bulk Delete] Error:', errorMessage, error);
+            set({ error: errorMessage, loading: false });
+            useToastStore.getState().addToast(`一括削除エラー: ${errorMessage}`, 'error');
+        }
+    },
+
+    // Bulk complete/uncomplete tasks
+    completeTasks: async (ids: string[], isCompleted: boolean) => {
+        if (ids.length === 0) return;
+
+        set({ loading: true, error: null });
+        try {
+            const newStatus = isCompleted ? 'DONE' : 'TODO';
+            console.log(`[Bulk Complete] Setting ${ids.length} tasks to ${newStatus}:`, ids);
+
+            const { error } = await supabase
+                .from('tasks')
+                .update({ status: newStatus })
+                .in('id', ids);
+
+            if (error) throw error;
+
+            // Update state
+            set((state) => ({
+                tasks: state.tasks.map((t) =>
+                    ids.includes(t.id) ? { ...t, status: newStatus } : t
+                ),
+                loading: false,
+            }));
+
+            // Show success toast
+            const action = isCompleted ? '完了' : '未完了';
+            useToastStore.getState().addToast(`${ids.length}件のタスクを${action}にしました`, 'success');
+            console.log(`[Bulk Complete] Successfully updated ${ids.length} tasks to ${newStatus}`);
+        } catch (error: any) {
+            const errorMessage = error?.message || 'Failed to complete tasks';
+            console.error('[Bulk Complete] Error:', errorMessage, error);
+            set({ error: errorMessage, loading: false });
+            useToastStore.getState().addToast(`一括更新エラー: ${errorMessage}`, 'error');
+        }
     },
 }));
 
