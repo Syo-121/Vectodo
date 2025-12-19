@@ -8,7 +8,7 @@ interface TaskNodeData {
     importance?: number | null;
 }
 
-export const TaskNode = memo(({ data }: NodeProps<TaskNodeData>) => {
+export const TaskNode = memo(({ data, selected }: NodeProps<TaskNodeData>) => {
     const { colorScheme } = useMantineColorScheme();
     const isDark = colorScheme === 'dark';
 
@@ -35,9 +35,21 @@ export const TaskNode = memo(({ data }: NodeProps<TaskNodeData>) => {
     // Theme-aware colors
     const bgColor = isDark ? '#fff' : '#2c2e33';
     const textColor = isDark ? '#000' : '#fff';
-    const borderColor = isHighImportance
-        ? '#228be6'
-        : isDark ? '#dee2e6' : '#495057';
+
+    // Border color: blue if selected, otherwise based on importance
+    const borderColor = selected
+        ? '#5c7cfa'
+        : isHighImportance
+            ? '#228be6'
+            : isDark ? '#dee2e6' : '#495057';
+
+    // Border width: thicker if selected
+    const borderWidth = selected ? '3px' : '2px';
+
+    // Box shadow: add glow effect when selected
+    const boxShadow = selected
+        ? '0 0 0 3px rgba(92, 124, 250, 0.3)'
+        : undefined;
 
     return (
         <Paper
@@ -47,10 +59,12 @@ export const TaskNode = memo(({ data }: NodeProps<TaskNodeData>) => {
             style={{
                 minWidth: 150,
                 maxWidth: 200,
-                border: `2px solid ${borderColor}`,
+                border: `${borderWidth} solid ${borderColor}`,
                 backgroundColor: bgColor,
                 color: textColor,
                 cursor: 'pointer',
+                boxShadow,
+                transition: 'all 0.2s ease',
             }}
         >
             <Handle type="target" position={Position.Left} />

@@ -269,10 +269,15 @@ export function PlanningTab() {
                 onNodeClick={onNodeClick}
                 nodeTypes={nodeTypes}
                 fitView
-                deleteKeyCode="Delete"
+                // Multi-selection features
+                selectionOnDrag={true}           // Enable box selection by dragging
+                panOnDrag={[1, 2]}              // Pan with middle/right mouse button only
+                selectionMode="partial"          // Select nodes even if partially in selection box
+                multiSelectionKeyCode="Control"  // Ctrl/Cmd for multi-select
+                deleteKeyCode="Delete"           // Delete key to remove selected nodes
             >
-                <Controls />
                 <Background />
+                <Controls />
             </ReactFlow>
 
             <TaskFormModal
