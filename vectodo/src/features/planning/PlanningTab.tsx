@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, useEffect } from 'react';
 import ReactFlow, {
     Controls,
     Background,
@@ -55,18 +55,45 @@ export function PlanningTab() {
         );
     }, [scopedTasks, dependencies]);
 
-    // Convert scoped tasks to nodes
+    // Load saved DAG positions from localStorage
+    const loadDagPositions = (): Record<string, { x: number; y: number }> => {
+        try {
+            const saved = localStorage.getItem('vectodo-dag-positions');
+            return saved ? JSON.parse(saved) : {};
+        } catch (error) {
+            console.error('[DAG] Failed to load positions:', error);
+            return {};
+        }
+    };
+
+    // Save DAG positions to localStorage
+    const saveDagPositions = (positions: Record<string, { x: number; y: number }>) => {
+        try {
+            localStorage.setItem('vectodo-dag-positions', JSON.stringify(positions));
+        } catch (error) {
+            console.error('[DAG] Failed to save positions:', error);
+        }
+    };
+
+    // Convert scoped tasks to nodes with saved positions
     const initialNodes: Node[] = useMemo(() => {
-        return scopedTasks.map((task, index) => ({
-            id: task.id,
-            type: 'taskNode',
-            position: { x: index * 250, y: index * 100 },
-            data: {
-                title: task.title,
-                status: task.status,
-                importance: task.importance,
-            },
-        }));
+        const savedPositions = loadDagPositions();
+
+        return scopedTasks.map((task, index) => {
+            // Use saved position if available, otherwise use auto-layout position
+            const position = savedPositions[task.id] || { x: index * 250, y: index * 100 };
+
+            return {
+                id: task.id,
+                type: 'taskNode',
+                position,
+                data: {
+                    title: task.title,
+                    status: task.status,
+                    importance: task.importance,
+                },
+            };
+        });
     }, [scopedTasks]);
 
     // Convert scoped dependencies to edges
@@ -80,13 +107,54 @@ export function PlanningTab() {
         }));
     }, [scopedDependencies]);
 
-    const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-    const [edges, setEdges] = useEdgesState(initialEdges);
+    const [nodes, setNodes, onNodesChange] = useNodesState([]);
+    const [edges, setEdges] = useEdgesState([]);
+
+    // Handle node drag stop - save position to localStorage
+    const onNodeDragStop = useCallback(
+        (_event: React.MouseEvent, node: Node) => {
+            const savedPositions = loadDagPositions();
+            savedPositions[node.id] = node.position;
+            saveDagPositions(savedPositions);
+            console.log(`[DAG] Saved position for node ${node.id}:`, node.position);
+        },
+        [saveDagPositions]
+    );
 
     // Update nodes and edges when tasks or dependencies change
-    useMemo(() => {
-        setNodes(initialNodes);
-        setEdges(initialEdges);
+    useEffect(() => {
+        if (scopedTasks.length === 0) {
+            setNodes([]);
+            setEdges([]);
+            return;
+        }
+
+        console.log('[DAG] Regenerating layout...');
+
+        // Step 1: Get auto-layout positions
+        const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
+            initialNodes,
+            initialEdges
+        );
+
+        // Step 2: Load saved positions
+        const savedPositions = loadDagPositions();
+        const savedCount = Object.keys(savedPositions).length;
+        console.log(`[DAG] Loaded ${savedCount} saved positions from localStorage`);
+
+        // Step 3: Merge - prioritize saved positions over auto-layout
+        const finalNodes = layoutedNodes.map(node => {
+            const savedPos = savedPositions[node.id];
+            if (savedPos) {
+                console.log(`[DAG] Restoring saved position for ${node.id}:`, savedPos);
+                return { ...node, position: savedPos };
+            }
+            // Use auto-layout position if no saved position
+            return node;
+        });
+
+        setNodes(finalNodes);
+        setEdges(layoutedEdges);
     }, [initialNodes, initialEdges, setNodes, setEdges]);
 
     // Handle connection creation
@@ -195,6 +263,7 @@ export function PlanningTab() {
                 nodes={nodes}
                 edges={edges}
                 onNodesChange={onNodesChange}
+                onNodeDragStop={onNodeDragStop}
                 onEdgesChange={handleEdgesChange}
                 onConnect={onConnect}
                 onNodeClick={onNodeClick}
