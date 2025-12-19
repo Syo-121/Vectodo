@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '../lib/supabaseClient';
 import type { Tables } from '../supabase-types';
+import { createGoogleEvent, updateGoogleEvent, deleteGoogleEvent } from '../utils/googleCalendarSync';
 
 type Task = Tables<'tasks'>;
 
@@ -187,6 +188,54 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
 
             console.log('Task created successfully:', data);
 
+            // Google Calendar Sync - create event if date information exists
+            console.log('🔄 [Task Store] Checking if Google sync is needed...');
+            console.log('   Task dates:', {
+                planned_start: data.planned_start,
+                planned_end: data.planned_end,
+                deadline: data.deadline,
+            });
+
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                console.log('   Session check:', {
+                    hasSession: !!session,
+                    hasToken: !!session?.provider_token,
+                    provider: session?.user?.app_metadata?.provider,
+                });
+
+                if (session?.provider_token && (data.planned_start || data.planned_end || data.deadline)) {
+                    console.log('📅 [Task Store] Date exists, starting Google sync...');
+                    const googleEventId = await createGoogleEvent(data, session);
+
+                    if (googleEventId) {
+                        // Update task with google_event_id
+                        const { error: updateError } = await supabase
+                            .from('tasks')
+                            .update({ google_event_id: googleEventId })
+                            .eq('id', data.id);
+
+                        if (!updateError) {
+                            data.google_event_id = googleEventId;
+                            console.log('✅ [Task Store] Google sync successful! Event ID:', googleEventId);
+                        } else {
+                            console.error('❌ [Task Store] Failed to save google_event_id:', updateError);
+                        }
+                    } else {
+                        console.log('ℹ️ [Task Store] Google sync returned null (event not created)');
+                    }
+                } else {
+                    if (!session?.provider_token) {
+                        console.log('ℹ️ [Task Store] Google sync skipped: No provider token');
+                    } else {
+                        console.log('ℹ️ [Task Store] Google sync skipped: No date information');
+                    }
+                }
+            } catch (syncError) {
+                // Sync errors should not block task creation
+                console.error('❌ [Task Store] Google Calendar sync failed:', syncError);
+            }
+
             // Add the new task to the beginning of the list
             set((state) => ({
                 tasks: [data, ...state.tasks],
@@ -220,31 +269,107 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
                 .select()
                 .single();
 
-            if (error) {
-                console.error('Supabase error details:', error);
-                throw error;
-            }
+            if (error) throw error;
 
             console.log('Task updated successfully:', data);
 
-            // Update the task in the list
+            // Update task in store first
             set((state) => ({
                 tasks: state.tasks.map((task) =>
                     task.id === taskId ? data : task
                 ),
                 loading: false,
             }));
+
+            // Google Calendar Sync - handle all patterns
+            console.log('🔄 [Task Store] Checking Google sync for updated task:', data.title);
+            console.log('   Current state:', {
+                has_google_event_id: !!data.google_event_id,
+                google_event_id: data.google_event_id,
+                planned_start: data.planned_start,
+                planned_end: data.planned_end,
+                deadline: data.deadline,
+            });
+
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+
+                if (!session?.provider_token) {
+                    console.log('ℹ️ [Task Store] No provider token, skipping Google sync');
+                    return;
+                }
+
+                const hasDate = !!(data.planned_start || data.planned_end || data.deadline);
+
+                // Pattern A: New sync (no google_event_id but has date) - CREATE
+                if (!data.google_event_id && hasDate) {
+                    console.log('🆕 [Task Store] Task scheduled for first time. Creating Google event...');
+                    const googleEventId = await createGoogleEvent(data, session);
+
+                    if (googleEventId) {
+                        console.log('✅ [Task Store] Event created! Saving ID:', googleEventId);
+
+                        // Update DB with google_event_id
+                        const { error: updateError } = await supabase
+                            .from('tasks')
+                            .update({ google_event_id: googleEventId })
+                            .eq('id', taskId);
+
+                        if (!updateError) {
+                            // Update store
+                            set((state) => ({
+                                tasks: state.tasks.map((t) =>
+                                    t.id === taskId ? { ...t, google_event_id: googleEventId } : t
+                                ),
+                            }));
+                            console.log('✅ [Task Store] google_event_id saved successfully');
+                        } else {
+                            console.error('❌ [Task Store] Failed to save google_event_id:', updateError);
+                        }
+                    } else {
+                        console.log('ℹ️ [Task Store] Event creation returned null');
+                    }
+                }
+                // Pattern B: Update existing event (has google_event_id and has date) - UPDATE
+                else if (data.google_event_id && hasDate) {
+                    console.log('📝 [Task Store] Updating existing Google event...');
+                    await updateGoogleEvent(data, data.google_event_id, session);
+                }
+                // Pattern C: Delete event (has google_event_id but no date) - DELETE
+                else if (data.google_event_id && !hasDate) {
+                    console.log('🗑️ [Task Store] Date removed. Deleting Google event...');
+                    await deleteGoogleEvent(data.google_event_id, session);
+
+                    // Clear google_event_id from DB
+                    const { error: clearError } = await supabase
+                        .from('tasks')
+                        .update({ google_event_id: null })
+                        .eq('id', taskId);
+
+                    if (!clearError) {
+                        // Update store
+                        set((state) => ({
+                            tasks: state.tasks.map((t) =>
+                                t.id === taskId ? { ...t, google_event_id: null } : t
+                            ),
+                        }));
+                        console.log('✅ [Task Store] google_event_id cleared');
+                    } else {
+                        console.error('❌ [Task Store] Failed to clear google_event_id:', clearError);
+                    }
+                }
+                // Pattern D: No sync needed (no google_event_id and no date)
+                else {
+                    console.log('ℹ️ [Task Store] No Google sync needed (no event ID and no date)');
+                }
+            } catch (syncError) {
+                console.error('❌ [Task Store] Google Calendar sync failed:', syncError);
+            }
         } catch (error: any) {
             const errorMessage = error?.message || 'Failed to update task';
-            const errorDetails = error?.details || '';
-            const errorHint = error?.hint || '';
-
-            const fullError = `${errorMessage}${errorDetails ? ` - ${errorDetails}` : ''}${errorHint ? ` (ヒント: ${errorHint})` : ''}`;
-
-            console.error('Full error:', fullError, error);
-
+            console.error('Update error:', errorMessage, error);
             set({
-                error: fullError,
+                error: errorMessage,
                 loading: false
             });
         }
@@ -255,15 +380,28 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
         try {
             console.log('Deleting task:', taskId);
 
+            // Get task before deletion for Google sync
+            const task = get().tasks.find(t => t.id === taskId);
+
+            // Google Calendar Sync - delete event before DB deletion
+            if (task?.google_event_id) {
+                try {
+                    const { data: { session } } = await supabase.auth.getSession();
+                    if (session?.provider_token) {
+                        console.log('[Task Store] Deleting event from Google Calendar...');
+                        await deleteGoogleEvent(task.google_event_id, session);
+                    }
+                } catch (syncError) {
+                    console.error('[Task Store] Google Calendar sync failed:', syncError);
+                }
+            }
+
             const { error } = await supabase
                 .from('tasks')
                 .delete()
                 .eq('id', taskId);
 
-            if (error) {
-                console.error('Supabase error details:', error);
-                throw error;
-            }
+            if (error) throw error;
 
             console.log('Task deleted successfully');
 
@@ -274,15 +412,9 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
             }));
         } catch (error: any) {
             const errorMessage = error?.message || 'Failed to delete task';
-            const errorDetails = error?.details || '';
-            const errorHint = error?.hint || '';
-
-            const fullError = `${errorMessage}${errorDetails ? ` - ${errorDetails}` : ''}${errorHint ? ` (ヒント: ${errorHint})` : ''}`;
-
-            console.error('Full error:', fullError, error);
-
+            console.error('Delete error:', errorMessage, error);
             set({
-                error: fullError,
+                error: errorMessage,
                 loading: false
             });
         }
