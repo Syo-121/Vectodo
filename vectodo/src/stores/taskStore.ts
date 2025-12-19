@@ -11,6 +11,7 @@ export interface TaskData {
     deadline?: string | null;
     importance?: number | null;
     description?: string | null;
+    parent_id?: string | null;
     planned_start?: string | null;
     planned_end?: string | null;
 }

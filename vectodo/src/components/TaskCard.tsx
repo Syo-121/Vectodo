@@ -1,5 +1,5 @@
 import { Card, Text, Badge, Group, Stack, Checkbox, ActionIcon, Menu } from '@mantine/core';
-import { Clock, AlertCircle, Play, Circle, Edit } from 'lucide-react';
+import { Clock, AlertCircle, Play, Circle, Edit, Folder } from 'lucide-react';
 import { useTaskStore } from '../stores/taskStore';
 import type { Tables } from '../supabase-types';
 
@@ -11,9 +11,12 @@ interface TaskCardProps {
 }
 
 export function TaskCard({ task, onEdit }: TaskCardProps) {
-    const { updateTaskStatus, startTimer, activeTaskId, setCurrentProject } = useTaskStore();
+    const { updateTaskStatus, startTimer, activeTaskId, setCurrentProject, tasks } = useTaskStore();
     const isDone = task.status === 'DONE' || task.status === 'done';
     const isActive = activeTaskId === task.id;
+
+    // Count subtasks
+    const subtaskCount = tasks.filter(t => t.parent_id === task.id).length;
 
     const getStatusColor = (status: string | null) => {
         const statusUpper = status?.toUpperCase();
