@@ -28,6 +28,7 @@ interface TaskStore {
     activeTaskId: string | null;
     timerStartTime: string | null;
     showCompletedTasks: boolean;
+    currentProjectId: string | null;
     fetchTasks: () => Promise<void>;
     fetchDependencies: () => Promise<void>;
     addTask: (taskData: TaskData) => Promise<void>;
@@ -38,6 +39,7 @@ interface TaskStore {
     stopTimer: () => Promise<void>;
     getCurrentTimerElapsed: () => number;
     toggleShowCompletedTasks: () => void;
+    setCurrentProject: (id: string | null) => void;
     addDependency: (predecessorId: string, successorId: string) => Promise<void>;
     removeDependency: (predecessorId: string, successorId: string) => Promise<void>;
 }
@@ -92,6 +94,18 @@ const saveShowCompletedSetting = (value: boolean) => {
 const initialTimerState = loadTimerState();
 const initialShowCompleted = loadShowCompletedSetting();
 
+// Load current project from localStorage
+const loadCurrentProject = (): string | null => {
+    try {
+        return localStorage.getItem('vectodo-current-project');
+    } catch (error) {
+        console.error('Failed to load current project:', error);
+        return null;
+    }
+};
+
+const initialCurrentProject = loadCurrentProject();
+
 export const useTaskStore = create<TaskStore>((set, get) => ({
     tasks: [],
     dependencies: [],
@@ -100,6 +114,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     activeTaskId: initialTimerState.activeTaskId,
     timerStartTime: initialTimerState.timerStartTime,
     showCompletedTasks: initialShowCompleted,
+    currentProjectId: initialCurrentProject,
 
     fetchTasks: async () => {
         set({ loading: true, error: null });
@@ -149,12 +164,14 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
 
             console.log('Creating task with:', { ...taskData, slug: finalSlug });
 
+            const { currentProjectId } = get();
             const { data, error } = await supabase
                 .from('tasks')
                 .insert({
                     title: taskData.title,
                     slug: finalSlug,
                     project_id: taskData.project_id,
+                    parent_id: currentProjectId,
                     estimate_minutes: taskData.estimate_minutes,
                     deadline: taskData.deadline,
                     importance: taskData.importance,
@@ -417,6 +434,20 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
         const newValue = !get().showCompletedTasks;
         set({ showCompletedTasks: newValue });
         saveShowCompletedSetting(newValue);
+    },
+
+    setCurrentProject: (id: string | null) => {
+        set({ currentProjectId: id });
+        // Persist to localStorage
+        try {
+            if (id) {
+                localStorage.setItem('vectodo-current-project', id);
+            } else {
+                localStorage.removeItem('vectodo-current-project');
+            }
+        } catch (error) {
+            console.error('Failed to save current project:', error);
+        }
     },
 }));
 

@@ -1,6 +1,7 @@
 import { Group, Title, ActionIcon, useMantineColorScheme, Switch } from '@mantine/core';
 import { CheckSquare, Sun, Moon } from 'lucide-react';
 import { useTaskStore } from '../stores/taskStore';
+import { Breadcrumb } from './Breadcrumb';
 
 export function Header() {
     const { colorScheme, toggleColorScheme } = useMantineColorScheme();
@@ -21,6 +22,8 @@ export function Header() {
                     Vectodo
                 </Title>
             </Group>
+
+            <Breadcrumb />
 
             <Group gap="md">
                 <Switch
