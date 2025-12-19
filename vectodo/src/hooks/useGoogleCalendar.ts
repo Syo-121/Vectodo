@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { useTaskStore } from '../stores/taskStore';
 
 export interface GoogleCalendar {
     id: string;
@@ -27,6 +28,9 @@ export function useGoogleCalendar(timeMin?: Date, timeMax?: Date) {
     const [calendars, setCalendars] = useState<GoogleCalendar[]>([]);
     const [selectedCalendarIds, setSelectedCalendarIds] = useState<string[]>(['primary']);
     const [loading, setLoading] = useState(false);
+
+    // Get tasks to filter out duplicates
+    const tasks = useTaskStore(state => state.tasks);
     const [error, setError] = useState<string | null>(null);
     const [session, setSession] = useState<any>(null);
 
@@ -136,7 +140,7 @@ export function useGoogleCalendar(timeMin?: Date, timeMax?: Date) {
 
                 const promises = selectedCalendarIds.map(async (calendarId) => {
                     try {
-                        const response = await fetch(
+                        const calendarResponse = await fetch(
                             `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?` +
                             new URLSearchParams({
                                 timeMin: defaultTimeMin.toISOString(),
@@ -151,14 +155,35 @@ export function useGoogleCalendar(timeMin?: Date, timeMax?: Date) {
                             }
                         );
 
-                        if (!response.ok) {
-                            console.error(`[Google Calendar] Failed to fetch events from ${calendarId}:`, response.status);
+                        if (!calendarResponse.ok) {
+                            console.error(`[Google Calendar] Failed to fetch events for ${calendarId}:`, calendarResponse.status);
                             return { calendarId, items: [] };
                         }
 
-                        const data = await response.json();
-                        console.log(`[Google Calendar] Fetched ${data.items?.length || 0} events from ${calendarId}`);
-                        return { calendarId, items: data.items || [] };
+                        const calendarData = await calendarResponse.json();
+                        console.log(`[Google Calendar] Fetched ${calendarData.items?.length || 0} events from ${calendarId}`);
+
+                        // Create a Set of google_event_ids from Vectodo tasks for efficient filtering
+                        const syncedEventIds = new Set(
+                            tasks
+                                .map(t => t.google_event_id)
+                                .filter(Boolean) as string[]
+                        );
+
+                        console.log(`[Google Calendar] Filtering out ${syncedEventIds.size} synced events`);
+
+                        // Filter out events that are already in Vectodo as tasks
+                        const filteredItems = (calendarData.items || []).filter((item: any) => {
+                            const isDuplicate = syncedEventIds.has(item.id);
+                            if (isDuplicate) {
+                                console.log(`[Google Calendar] Skipping duplicate event: ${item.summary} (${item.id})`);
+                            }
+                            return !isDuplicate;
+                        });
+
+                        console.log(`[Google Calendar] After filtering: ${filteredItems.length} unique events`);
+
+                        return { calendarId, items: filteredItems };
                     } catch (err) {
                         console.error(`[Google Calendar] Error fetching from ${calendarId}:`, err);
                         return { calendarId, items: [] };
