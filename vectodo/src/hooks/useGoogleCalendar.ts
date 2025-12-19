@@ -23,16 +23,36 @@ interface GoogleCalendarEvent {
     };
 }
 
+// Load saved calendar selection from localStorage
+const loadSelectedCalendars = (): string[] => {
+    try {
+        const saved = localStorage.getItem('vectodo-selected-calendars');
+        return saved ? JSON.parse(saved) : ['primary'];
+    } catch (error) {
+        console.error('[Google Calendar] Failed to load selected calendars:', error);
+        return ['primary'];
+    }
+};
+
 export function useGoogleCalendar(timeMin?: Date, timeMax?: Date) {
     const [events, setEvents] = useState<GoogleCalendarEvent[]>([]);
     const [calendars, setCalendars] = useState<GoogleCalendar[]>([]);
-    const [selectedCalendarIds, setSelectedCalendarIds] = useState<string[]>(['primary']);
+    const [selectedCalendarIds, setSelectedCalendarIds] = useState<string[]>(loadSelectedCalendars());
     const [loading, setLoading] = useState(false);
 
     // Get tasks to filter out duplicates
     const tasks = useTaskStore(state => state.tasks);
     const [error, setError] = useState<string | null>(null);
     const [session, setSession] = useState<any>(null);
+
+    // Save selected calendars to localStorage whenever they change
+    useEffect(() => {
+        try {
+            localStorage.setItem('vectodo-selected-calendars', JSON.stringify(selectedCalendarIds));
+        } catch (error) {
+            console.error('[Google Calendar] Failed to save selected calendars:', error);
+        }
+    }, [selectedCalendarIds]);
 
     // Monitor session changes
     useEffect(() => {
