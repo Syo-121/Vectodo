@@ -49,6 +49,18 @@ export function SchedulingTab() {
         });
     }, [tasks, showCompletedTasks]);
 
+    // Left sidebar: scheduled tasks in current scope only (for the list)
+    const scopedScheduledTasks = useMemo(() => {
+        return scheduledTasks.filter(task => {
+            // Hierarchy scope check for sidebar list
+            const isCorrectScope = currentProjectId
+                ? task.parent_id === currentProjectId
+                : task.parent_id === null;
+
+            return isCorrectScope;
+        });
+    }, [scheduledTasks, currentProjectId]);
+
     // Map scheduled tasks to calendar events
     const events = useMemo(() => {
         return scheduledTasks.map(task => {
@@ -237,10 +249,10 @@ export function SchedulingTab() {
                         </Text>
                         <ScrollArea h="calc(50vh - 150px)">
                             <Stack gap="xs">
-                                {scheduledTasks.length === 0 ? (
+                                {scopedScheduledTasks.length === 0 ? (
                                     <Text c="dimmed" size="sm">スケジュール済みのタスクはありません</Text>
                                 ) : (
-                                    scheduledTasks.map((task) => (
+                                    scopedScheduledTasks.map((task) => (
                                         <Paper
                                             key={task.id}
                                             p="xs"
