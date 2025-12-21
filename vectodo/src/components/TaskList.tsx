@@ -297,17 +297,28 @@ export function TaskList({ onTaskClick }: TaskListProps) {
 
                     console.log('[Selection] Beforestart - checking target:', target.className);
 
-                    // Check if clicked on task card or bulk action bar
-                    const isTaskCard = target.closest('.task-card');
+                    // Check if clicked on interactive elements - PREVENT selection if so
+                    if (target.closest('input') ||
+                        target.closest('button') ||
+                        target.closest('a') ||
+                        target.closest('.mantine-TextInput-root') ||
+                        target.closest('.mantine-DateTimePicker-root') ||
+                        target.closest('.mantine-Menu-dropdown') ||
+                        target.closest('.mantine-ActionIcon-root')) {
+                        return false;
+                    }
+
+                    // Check if clicked on task row or bulk action bar
+                    const isTaskRow = target.closest('.task-row');
                     const isBulkActionBar = target.closest('.bulk-action-bar');
                     const isCheckbox = target.closest('.mantine-Checkbox-root');
 
                     // If NOT clicking on task-related elements, clear selection
-                    if (!isTaskCard && !isBulkActionBar && !isCheckbox) {
+                    if (!isTaskRow && !isBulkActionBar && !isCheckbox) {
                         console.log('[Selection] ✅ Tap outside - clearing selection');
                         setSelectedIds(new Set());
                         selection.clearSelection();
-                        document.querySelectorAll('.task-card.selected, .task-card.temp-selected').forEach(el => {
+                        document.querySelectorAll('.task-row.selected, .task-row.temp-selected').forEach(el => {
                             el.classList.remove('selected', 'temp-selected');
                         });
                         return false; // Prevent selection from starting
@@ -440,12 +451,17 @@ export function TaskList({ onTaskClick }: TaskListProps) {
 
                 <ScrollArea>
                     <Table
-                        highlightOnHover
                         verticalSpacing="xs"
                         withTableBorder
                         styles={{
                             th: { paddingTop: '6px', paddingBottom: '6px', verticalAlign: 'middle' },
-                            td: { paddingTop: '4px', paddingBottom: '4px', verticalAlign: 'middle' }
+                            td: { paddingTop: '4px', paddingBottom: '4px', verticalAlign: 'middle' },
+                            tr: {
+                                transition: 'background-color 150ms ease',
+                                ':hover:not(:has(input:focus))': {
+                                    backgroundColor: 'light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-5))',
+                                },
+                            },
                         }}
                     >
                         <Table.Thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--mantine-color-body)' }}>
@@ -641,12 +657,14 @@ export function TaskList({ onTaskClick }: TaskListProps) {
                                                     setEditingTitle(task.title);
                                                 }}
                                                 onBlur={() => {
-                                                    if (editingTaskId === task.id && editingTitle !== task.title) {
+                                                    if (editingTaskId === task.id && editingTitle !== task.title && editingTitle.trim()) {
                                                         handleTitleUpdate(task.id, editingTitle);
-                                                    } else {
-                                                        setEditingTaskId(null);
-                                                        setEditingTitle('');
                                                     }
+                                                    // Always clear editing state on blur
+                                                    setEditingTaskId(null);
+                                                    setEditingTitle('');
+                                                    // Force clear any persistent selection/highlight
+                                                    handleCancelSelection();
                                                 }}
                                                 onKeyDown={(e) => {
                                                     if (e.key === 'Enter') {
@@ -659,6 +677,7 @@ export function TaskList({ onTaskClick }: TaskListProps) {
                                                 }}
                                                 variant="unstyled"
                                                 size="sm"
+                                                autoComplete="off"
                                                 style={{ maxWidth: '400px' }}
                                             />
                                         </Table.Td>
