@@ -4,6 +4,7 @@ import { Paper, Text, Badge, Group, Stack, useMantineColorScheme, ThemeIcon } fr
 import { Calendar, AlertCircle } from 'lucide-react';
 import dayjs from 'dayjs';
 import { getStatusConfig } from '../../utils/taskUtils';
+import { calculateUrgencyFromDeadline } from '../../utils/urgency';
 
 interface TaskNodeData {
     title: string;
@@ -22,6 +23,10 @@ export const TaskNode = memo(({ data, selected }: NodeProps<TaskNodeData>) => {
     const statusConfig = getStatusConfig(data.status);
     const borderColor = statusConfig.color;
 
+    // Calculate urgency for highlighting
+    const urgencyConfig = calculateUrgencyFromDeadline(data.deadline, data.status);
+    const isHighUrgency = urgencyConfig.level >= 80; // High or Highest
+
     // Deadline processing
     const deadline = data.deadline ? dayjs(data.deadline) : null;
     const isOverdue = deadline ? deadline.isBefore(dayjs(), 'day') : false;
@@ -35,10 +40,15 @@ export const TaskNode = memo(({ data, selected }: NodeProps<TaskNodeData>) => {
     };
     const estimate = getEstimateText(data.estimate_minutes);
 
-    // Theme-aware styles
+    // Theme-aware styles with urgency highlight
     // Use dark[5] for even better visibility against dark background
     const bgColor = isDark ? 'var(--mantine-color-dark-5)' : '#fff';
     const textColor = isDark ? '#fff' : '#000';
+
+    // Add subtle red/orange tint for high urgency tasks
+    const urgencyOverlay = isHighUrgency
+        ? (urgencyConfig.level >= 95 ? 'rgba(250, 82, 82, 0.15)' : 'rgba(253, 126, 20, 0.12)') // Red for highest, orange for high
+        : 'transparent';
 
     return (
         <Paper
@@ -49,6 +59,7 @@ export const TaskNode = memo(({ data, selected }: NodeProps<TaskNodeData>) => {
                 minWidth: 220,
                 maxWidth: 260, // Slightly wider to accommodate right-side time
                 backgroundColor: bgColor,
+                backgroundImage: `linear-gradient(${urgencyOverlay}, ${urgencyOverlay})`,
                 color: textColor,
                 // Use outline for selection to avoid conflicting with the status border
                 border: '1px solid transparent',
