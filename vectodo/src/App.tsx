@@ -5,13 +5,14 @@ import { useState, useEffect } from 'react';
 import { MantineProvider, AppShell, Stack, Button, Tabs, Loader, Center } from '@mantine/core';
 import { ModalsProvider } from '@mantine/modals';
 import { Notifications } from '@mantine/notifications';
-import { Plus, List, Calendar, Network } from 'lucide-react';
+import { Plus, List, Calendar, Network, Columns } from 'lucide-react';
 import { Header } from './components/Header';
 import { TaskList } from './components/TaskList';
 import { TaskFormModal } from './components/TaskFormModal';
 import { ActiveTaskWidget } from './components/ActiveTaskWidget';
 import { SchedulingTab } from './features/calendar/SchedulingTab';
 import { PlanningTab } from './features/planning/PlanningTab';
+import { KanbanBoard } from './features/kanban/KanbanBoard';
 import { ToastContainer } from './components/ToastContainer';
 import { LoginScreen } from './features/auth/LoginScreen';
 import { supabase } from './lib/supabaseClient';
@@ -121,6 +122,9 @@ function App() {
                   <Tabs.Tab value="list" leftSection={<List size={16} />}>
                     リスト
                   </Tabs.Tab>
+                  <Tabs.Tab value="kanban" leftSection={<Columns size={16} />}>
+                    カンバン
+                  </Tabs.Tab>
                   <Tabs.Tab value="calendar" leftSection={<Calendar size={16} />}>
                     カレンダー
                   </Tabs.Tab>
@@ -131,6 +135,10 @@ function App() {
 
                 <Tabs.Panel value="list" pt="md">
                   <TaskList onTaskClick={handleTaskClick} />
+                </Tabs.Panel>
+
+                <Tabs.Panel value="kanban" pt="md">
+                  <KanbanBoard onEdit={handleTaskClick} />
                 </Tabs.Panel>
 
                 <Tabs.Panel value="calendar" pt="md">

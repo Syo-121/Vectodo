@@ -92,7 +92,7 @@ export function TaskList({ onTaskClick }: TaskListProps) {
 
             const selection = new SelectionArea({
                 selectables: ['.task-card'],
-                boundaries: ['body'], // Allow drag from anywhere on the page
+                boundaries: ['.task-list-container'], // Limit to task list container only
             })
                 .on('start', ({ event }) => {
                     console.log('[Selection] Start event', event);

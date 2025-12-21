@@ -1,0 +1,24 @@
+/* Kanban Board Styles */
+
+/* Disable Selection.js in kanban board */
+.kanban-board .selection-area {
+    display: none !important;
+}
+
+/* Prevent Selection.js from interfering with drag-and-drop */
+.kanban-card {
+    user-select: none;
+}
+
+/* Ensure kanban cards don't have selection styles */
+.kanban-card.selected,
+.kanban-card.temp-selected {
+    background-color: transparent !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+/* Smooth drag transition */
+.kanban-card {
+    transition: opacity 0.2s ease;
+}

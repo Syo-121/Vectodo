@@ -90,6 +90,7 @@ export type Database = {
           urgency: number | null
           google_event_id: string | null
           google_calendar_id: string | null
+          completed_at: string | null
         }
         Insert: {
           actual_minutes?: number | null
@@ -109,6 +110,7 @@ export type Database = {
           urgency?: number | null
           google_event_id?: string | null
           google_calendar_id?: string | null
+          completed_at?: string | null
         }
         Update: {
           actual_minutes?: number | null
@@ -128,6 +130,7 @@ export type Database = {
           urgency?: number | null
           google_event_id?: string | null
           google_calendar_id?: string | null
+          completed_at?: string | null
         }
         Relationships: [
           {
@@ -277,3 +280,7 @@ export const Constants = {
     Enums: {},
   },
 } as const
+
+// Task status type for kanban board
+export type TaskStatus = 'todo' | 'in_progress' | 'pending' | 'done';
+
