@@ -11,7 +11,7 @@ import './kanban.css';
 type Task = Tables<'tasks'>;
 
 interface KanbanBoardProps {
-    onTaskClick: (task: Task) => void;
+    onEdit: (task: Task) => void;
 }
 
 interface Column {
@@ -48,8 +48,8 @@ const columns: Column[] = [
     },
 ];
 
-export function KanbanBoard({ onTaskClick }: KanbanBoardProps) {
-    const { tasks, loading, fetchTasks, updateTaskStatus, currentProjectId, showCompletedTasks, doneFilterDays, setDoneFilterDays } = useTaskStore();
+export function KanbanBoard({ onEdit }: KanbanBoardProps) {
+    const { tasks, loading, fetchTasks, updateTaskStatus, currentProjectId, showCompletedTasks, doneFilterDays, setDoneFilterDays, setCurrentProject } = useTaskStore();
     const { colorScheme } = useMantineColorScheme();
     const theme = useMantineTheme();
     const isDark = colorScheme === 'dark';
@@ -57,6 +57,11 @@ export function KanbanBoard({ onTaskClick }: KanbanBoardProps) {
     useEffect(() => {
         fetchTasks();
     }, [fetchTasks]);
+
+    // Handle drill-down into task hierarchy
+    const handleDrillDown = (task: Task) => {
+        setCurrentProject(task.id);
+    };
 
     // Filter tasks by current project and completion status
     const displayTasks = useMemo(() => {
@@ -335,7 +340,8 @@ export function KanbanBoard({ onTaskClick }: KanbanBoardProps) {
                                                             >
                                                                 <KanbanCard
                                                                     task={task}
-                                                                    onTaskClick={onTaskClick}
+                                                                    onDrillDown={handleDrillDown}
+                                                                    onEdit={onEdit}
                                                                 />
                                                             </div>
                                                         )}

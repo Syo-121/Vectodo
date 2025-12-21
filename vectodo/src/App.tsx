@@ -138,7 +138,7 @@ function App() {
                 </Tabs.Panel>
 
                 <Tabs.Panel value="kanban" pt="md">
-                  <KanbanBoard onTaskClick={handleTaskClick} />
+                  <KanbanBoard onEdit={handleTaskClick} />
                 </Tabs.Panel>
 
                 <Tabs.Panel value="calendar" pt="md">

@@ -1,15 +1,16 @@
-import { Card, Text, Badge, Stack, Group, useMantineColorScheme, useMantineTheme } from '@mantine/core';
-import { Clock, AlertCircle, CheckCircle } from 'lucide-react';
+import { Card, Text, Badge, Stack, Group, useMantineColorScheme, useMantineTheme, ActionIcon } from '@mantine/core';
+import { Clock, AlertCircle, CheckCircle, Pencil } from 'lucide-react';
 import type { Tables } from '../../supabase-types';
 
 type Task = Tables<'tasks'>;
 
 interface KanbanCardProps {
     task: Task;
-    onTaskClick: (task: Task) => void;
+    onDrillDown: (task: Task) => void;
+    onEdit: (task: Task) => void;
 }
 
-export function KanbanCard({ task, onTaskClick }: KanbanCardProps) {
+export function KanbanCard({ task, onDrillDown, onEdit }: KanbanCardProps) {
     const hasDeadline = task.deadline;
     const isOverdue = hasDeadline && new Date(task.deadline!) < new Date();
     const { colorScheme } = useMantineColorScheme();
@@ -39,14 +40,28 @@ export function KanbanCard({ task, onTaskClick }: KanbanCardProps) {
                     e.currentTarget.style.backgroundColor = theme.colors.dark[5];
                 }
             }}
-            onClick={() => onTaskClick(task)}
+            onClick={() => onDrillDown(task)}
             className="kanban-card"
         >
             <Stack gap="xs">
-                {/* Title */}
-                <Text fw={600} size="sm" lineClamp={2}>
-                    {task.title}
-                </Text>
+                {/* Title with Edit Button */}
+                <Group justify="space-between" align="flex-start" wrap="nowrap">
+                    <Text fw={600} size="sm" lineClamp={2} style={{ flex: 1 }}>
+                        {task.title}
+                    </Text>
+                    <ActionIcon
+                        size="sm"
+                        variant="subtle"
+                        color="gray"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onEdit(task);
+                        }}
+                        style={{ flexShrink: 0 }}
+                    >
+                        <Pencil size={14} />
+                    </ActionIcon>
+                </Group>
 
                 {/* Description preview */}
                 {task.description && (
