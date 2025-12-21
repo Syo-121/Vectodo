@@ -75,7 +75,6 @@ export function TaskFormModal({ opened, onClose, task, onUnschedule }: TaskFormM
             estimate_minutes: null as number | null,
             deadline: null as Date | null,
             importance: '20' as string, // Default: Low (20)
-            urgency: '20' as string,    // Default: Low (20)
             status: 'TODO' as string,
             planned_start: null as Date | null,
             planned_end: null as Date | null,
@@ -98,7 +97,6 @@ export function TaskFormModal({ opened, onClose, task, onUnschedule }: TaskFormM
                 estimate_minutes: task?.estimate_minutes || null,
                 deadline: task?.deadline ? new Date(task.deadline) : null,
                 importance: task?.importance ? task.importance.toString() : '20',
-                urgency: task?.urgency ? task.urgency.toString() : '20',
                 status: task?.status || 'TODO',
                 planned_start: task?.planned_start ? new Date(task.planned_start) : null,
                 planned_end: task?.planned_end ? new Date(task.planned_end) : null,
@@ -116,7 +114,6 @@ export function TaskFormModal({ opened, onClose, task, onUnschedule }: TaskFormM
                 estimate_minutes: values.estimate_minutes,
                 deadline: values.deadline ? dayjs(values.deadline).toISOString() : null,
                 importance: parseInt(values.importance),
-                urgency: parseInt(values.urgency),
                 planned_start: values.planned_start ? dayjs(values.planned_start).toISOString() : null,
                 planned_end: values.planned_end ? dayjs(values.planned_end).toISOString() : null,
             };
@@ -283,20 +280,6 @@ export function TaskFormModal({ opened, onClose, task, onUnschedule }: TaskFormM
                                         { label: '高', value: '90' },
                                     ]}
                                     {...form.getInputProps('importance')}
-                                />
-                            </Stack>
-
-                            <Stack gap="xs">
-                                <Text size="sm">🔥 緊急度 (Urgency)</Text>
-                                <SegmentedControl
-                                    fullWidth
-                                    color="red"
-                                    data={[
-                                        { label: '低', value: '20' },
-                                        { label: '中', value: '50' },
-                                        { label: '高', value: '90' },
-                                    ]}
-                                    {...form.getInputProps('urgency')}
                                 />
                             </Stack>
 
