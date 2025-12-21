@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Stack, Text, Loader, Alert, Center, Checkbox, Table, ActionIcon, Badge, ScrollArea, Menu, TextInput } from '@mantine/core';
+import { Stack, Text, Loader, Alert, Center, Checkbox, Table, ActionIcon, Badge, ScrollArea, Menu, TextInput, Group, Tooltip } from '@mantine/core';
 import { DateTimePicker } from '@mantine/dates';
-import { AlertCircle, Trash2, Circle, Play, Pause, CheckCircle, ArrowUp, ArrowRight, ArrowDown } from 'lucide-react';
+import { AlertCircle, Trash2, Circle, Play, Pause, CheckCircle, ArrowUp, ArrowRight, ArrowDown, FolderOpen, Pencil } from 'lucide-react';
 import { useTaskStore } from '../stores/taskStore';
 import { BulkActionBar } from './BulkActionBar';
 import type { Tables } from '../supabase-types';
@@ -295,7 +295,7 @@ export function TaskList({ onTaskClick }: TaskListProps) {
                                 <Table.Th style={{ width: '140px' }}>開始</Table.Th>
                                 <Table.Th style={{ width: '140px' }}>終了</Table.Th>
                                 <Table.Th style={{ width: '150px' }}>期限</Table.Th>
-                                <Table.Th style={{ width: '80px' }}>操作</Table.Th>
+                                <Table.Th style={{ width: '100px' }}>操作</Table.Th>
                             </Table.Tr>
                         </Table.Thead>
                         <Table.Tbody>
@@ -426,21 +426,21 @@ export function TaskList({ onTaskClick }: TaskListProps) {
                                                         onClick={() => handleImportanceChange(task.id, 90)}
                                                         color="violet"
                                                     >
-                                                        重要度: 高
+                                                        緊急度: 高
                                                     </Menu.Item>
                                                     <Menu.Item
                                                         leftSection={<ArrowRight size={16} />}
                                                         onClick={() => handleImportanceChange(task.id, 50)}
                                                         color="grape"
                                                     >
-                                                        重要度: 中
+                                                        緊急度: 中
                                                     </Menu.Item>
                                                     <Menu.Item
                                                         leftSection={<ArrowDown size={16} />}
                                                         onClick={() => handleImportanceChange(task.id, 20)}
                                                         color="indigo"
                                                     >
-                                                        重要度: 低
+                                                        緊急度: 低
                                                     </Menu.Item>
                                                     <Menu.Divider />
                                                     <Menu.Item
@@ -519,46 +519,60 @@ export function TaskList({ onTaskClick }: TaskListProps) {
                                             </Menu>
                                         </Table.Td>
 
-                                        {/* Title - Inline Editable */}
+                                        {/* Title column: Folder icon + Input */}
                                         <Table.Td onClick={(e) => e.stopPropagation()}>
-                                            <TextInput
-                                                value={editingTaskId === task.id ? editingTitle : task.title}
-                                                onChange={(e) => {
-                                                    if (editingTaskId !== task.id) {
+                                            <Group gap="xs" wrap="nowrap">
+                                                <Tooltip label="このタスクを開く (階層移動)" openDelay={500}>
+                                                    <ActionIcon
+                                                        variant="subtle"
+                                                        size="sm"
+                                                        color="blue"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setCurrentProject(task.id);
+                                                        }}
+                                                    >
+                                                        <FolderOpen size={16} />
+                                                    </ActionIcon>
+                                                </Tooltip>
+
+                                                <TextInput
+                                                    value={editingTaskId === task.id ? editingTitle : task.title}
+                                                    onChange={(e) => {
+                                                        if (editingTaskId !== task.id) {
+                                                            setEditingTaskId(task.id);
+                                                            setEditingTitle(e.target.value);
+                                                        } else {
+                                                            setEditingTitle(e.target.value);
+                                                        }
+                                                    }}
+                                                    onFocus={() => {
                                                         setEditingTaskId(task.id);
-                                                        setEditingTitle(e.target.value);
-                                                    } else {
-                                                        setEditingTitle(e.target.value);
-                                                    }
-                                                }}
-                                                onFocus={() => {
-                                                    setEditingTaskId(task.id);
-                                                    setEditingTitle(task.title);
-                                                }}
-                                                onBlur={() => {
-                                                    if (editingTaskId === task.id && editingTitle !== task.title && editingTitle.trim()) {
-                                                        handleTitleUpdate(task.id, editingTitle);
-                                                    }
-                                                    // Always clear editing state on blur
-                                                    setEditingTaskId(null);
-                                                    setEditingTitle('');
-                                                    // Force clear any persistent selection/highlight
-                                                    handleCancelSelection();
-                                                }}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') {
-                                                        e.currentTarget.blur();
-                                                    } else if (e.key === 'Escape') {
+                                                        setEditingTitle(task.title);
+                                                    }}
+                                                    onBlur={() => {
+                                                        if (editingTaskId === task.id && editingTitle !== task.title && editingTitle.trim()) {
+                                                            handleTitleUpdate(task.id, editingTitle);
+                                                        }
                                                         setEditingTaskId(null);
                                                         setEditingTitle('');
-                                                        e.currentTarget.blur();
-                                                    }
-                                                }}
-                                                variant="unstyled"
-                                                size="sm"
-                                                autoComplete="off"
-                                                style={{ maxWidth: '400px' }}
-                                            />
+                                                        handleCancelSelection();
+                                                    }}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') {
+                                                            e.currentTarget.blur();
+                                                        } else if (e.key === 'Escape') {
+                                                            setEditingTaskId(null);
+                                                            setEditingTitle('');
+                                                            e.currentTarget.blur();
+                                                        }
+                                                    }}
+                                                    variant="unstyled"
+                                                    size="sm"
+                                                    autoComplete="off"
+                                                    style={{ maxWidth: '360px', flexGrow: 1 }}
+                                                />
+                                            </Group>
                                         </Table.Td>
 
 
@@ -607,19 +621,37 @@ export function TaskList({ onTaskClick }: TaskListProps) {
                                             />
                                         </Table.Td>
 
-                                        {/* Actions */}
+                                        {/* Actions: Edit & Delete */}
                                         <Table.Td onClick={(e) => e.stopPropagation()}>
-                                            <ActionIcon
-                                                size="sm"
-                                                variant="subtle"
-                                                color="red"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleDelete(task.id);
-                                                }}
-                                            >
-                                                <Trash2 size={16} />
-                                            </ActionIcon>
+                                            <Group gap={4} wrap="nowrap">
+                                                <Tooltip label="詳細を編集" openDelay={500}>
+                                                    <ActionIcon
+                                                        size="sm"
+                                                        variant="subtle"
+                                                        color="gray"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            if (onTaskClick) onTaskClick(task);
+                                                        }}
+                                                    >
+                                                        <Pencil size={16} />
+                                                    </ActionIcon>
+                                                </Tooltip>
+
+                                                <Tooltip label="削除" openDelay={500}>
+                                                    <ActionIcon
+                                                        size="sm"
+                                                        variant="subtle"
+                                                        color="red"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleDelete(task.id);
+                                                        }}
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </ActionIcon>
+                                                </Tooltip>
+                                            </Group>
                                         </Table.Td>
                                     </Table.Tr>
                                 );
