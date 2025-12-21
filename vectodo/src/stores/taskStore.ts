@@ -12,6 +12,7 @@ export interface TaskData {
     estimate_minutes?: number | null;
     deadline?: string | null;
     importance?: number | null;
+    urgency?: number | null;
     description?: string | null;
     parent_id?: string | null;
     planned_start?: string | null;
@@ -39,6 +40,9 @@ interface TaskStore {
     addTask: (taskData: TaskData) => Promise<void>;
     updateTask: (taskId: string, updates: Partial<TaskData>) => Promise<void>;
     updateTaskStatus: (taskId: string, status: string | null) => Promise<void>;
+    updateTaskImportance: (taskId: string, importance: number | null) => Promise<void>;
+    updateTaskUrgency: (taskId: string, urgency: number | null) => Promise<void>;
+    updateTaskPriority: (taskId: string, importance: number | null) => Promise<void>; // Alias for backward compatibility
     deleteTask: (taskId: string) => Promise<void>;
     startTimer: (taskId: string) => Promise<void>;
     stopTimer: () => Promise<void>;
@@ -616,6 +620,77 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
             console.error('[TaskStore] Failed to update task status:', error);
             useToastStore.getState().addToast('ステータスの更新に失敗しました', 'error');
         }
+    },
+
+    updateTaskImportance: async (taskId: string, importance: number | null) => {
+        console.log('[TaskStore] Updating task importance:', { taskId, importance });
+
+        // Store original state for rollback
+        const originalTasks = get().tasks;
+
+        try {
+            // Optimistic update
+            set((state) => ({
+                tasks: state.tasks.map(task =>
+                    task.id === taskId ? { ...task, importance } : task
+                ),
+            }));
+
+            // Update database
+            const { error } = await supabase
+                .from('tasks')
+                .update({ importance })
+                .eq('id', taskId);
+
+            if (error) {
+                console.error('Failed to update importance:', error);
+                set({ tasks: originalTasks }); // Rollback
+                throw error;
+            }
+
+            useToastStore.getState().addToast('重要度を更新しました', 'success');
+        } catch (error) {
+            console.error('Failed to update importance:', error);
+            useToastStore.getState().addToast('重要度の更新に失敗しました', 'error');
+        }
+    },
+
+    updateTaskUrgency: async (taskId: string, urgency: number | null) => {
+        console.log('[TaskStore] Updating task urgency:', { taskId, urgency });
+
+        // Store original state for rollback
+        const originalTasks = get().tasks;
+
+        try {
+            // Optimistic update
+            set((state) => ({
+                tasks: state.tasks.map(task =>
+                    task.id === taskId ? { ...task, urgency } : task
+                ),
+            }));
+
+            // Update database
+            const { error } = await supabase
+                .from('tasks')
+                .update({ urgency })
+                .eq('id', taskId);
+
+            if (error) {
+                console.error('Failed to update urgency:', error);
+                set({ tasks: originalTasks }); // Rollback
+                throw error;
+            }
+
+            useToastStore.getState().addToast('緊急度を更新しました', 'success');
+        } catch (error) {
+            console.error('Failed to update urgency:', error);
+            useToastStore.getState().addToast('緊急度の更新に失敗しました', 'error');
+        }
+    },
+
+    // Alias for backward compatibility (Kanban board support)
+    updateTaskPriority: async (taskId: string, importance: number | null) => {
+        return get().updateTaskImportance(taskId, importance);
     },
 
     startTimer: async (taskId: string) => {

@@ -23,6 +23,8 @@ export function TaskList({ onTaskClick }: TaskListProps) {
         deleteTasks,
         completeTasks,
         updateTaskStatus,
+        updateTaskImportance,
+        updateTaskUrgency,
         setCurrentProject
     } = useTaskStore();
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -76,25 +78,14 @@ export function TaskList({ onTaskClick }: TaskListProps) {
         await updateTaskStatus(taskId, newStatus);
     };
 
-    // Handle priority change from menu
-    const handlePriorityChange = async (taskId: string, importance: number | null) => {
-        const task = tasks.find(t => t.id === taskId);
-        if (!task) return;
+    // Handle importance change
+    const handleImportanceChange = async (taskId: string, importance: number | null) => {
+        await updateTaskImportance(taskId, importance);
+    };
 
-        // Direct Supabase update for importance
-        const { supabase } = await import('../lib/supabaseClient');
-        const { error } = await supabase
-            .from('tasks')
-            .update({ importance })
-            .eq('id', taskId);
-
-        if (error) {
-            console.error('Failed to update importance:', error);
-            return;
-        }
-
-        // Refresh tasks to get updated data
-        await fetchTasks();
+    // Handle urgency change
+    const handleUrgencyChange = async (taskId: string, urgency: number | null) => {
+        await updateTaskUrgency(taskId, urgency);
     };
 
     // Handle title inline editing
@@ -298,7 +289,8 @@ export function TaskList({ onTaskClick }: TaskListProps) {
                                 </Table.Th>
                                 <Table.Th style={{ width: '60px' }}>完了</Table.Th>
                                 <Table.Th style={{ width: '120px' }}>ステータス</Table.Th>
-                                <Table.Th style={{ width: '120px' }}>優先度</Table.Th>
+                                <Table.Th style={{ width: '130px' }}>重要度</Table.Th>
+                                <Table.Th style={{ width: '130px' }}>緊急度</Table.Th>
                                 <Table.Th>タイトル</Table.Th>
                                 <Table.Th style={{ width: '140px' }}>開始</Table.Th>
                                 <Table.Th style={{ width: '140px' }}>終了</Table.Th>
@@ -395,15 +387,15 @@ export function TaskList({ onTaskClick }: TaskListProps) {
                                             </Menu>
                                         </Table.Td>
 
-                                        {/* Priority Menu */}
+                                        {/* Importance Menu */}
                                         <Table.Td onClick={(e) => e.stopPropagation()}>
                                             <Menu shadow="md" width={160}>
                                                 <Menu.Target>
                                                     {task.importance !== null && task.importance > 0 ? (
                                                         <Badge
                                                             color={
-                                                                task.importance >= 80 ? 'red' :
-                                                                    task.importance >= 50 ? 'orange' : 'blue'
+                                                                task.importance >= 80 ? 'violet' :
+                                                                    task.importance >= 50 ? 'grape' : 'indigo'
                                                             }
                                                             variant="light"
                                                             size="sm"
@@ -424,38 +416,104 @@ export function TaskList({ onTaskClick }: TaskListProps) {
                                                             size="sm"
                                                             style={{ cursor: 'pointer', minHeight: '22px', display: 'inline-flex', alignItems: 'center' }}
                                                         >
-                                                            なし
+                                                            -
                                                         </Badge>
                                                     )}
                                                 </Menu.Target>
                                                 <Menu.Dropdown>
                                                     <Menu.Item
                                                         leftSection={<ArrowUp size={16} />}
-                                                        onClick={() => handlePriorityChange(task.id, 90)}
-                                                        color="red"
+                                                        onClick={() => handleImportanceChange(task.id, 90)}
+                                                        color="violet"
                                                     >
-                                                        高 (High)
+                                                        重要度: 高
                                                     </Menu.Item>
                                                     <Menu.Item
                                                         leftSection={<ArrowRight size={16} />}
-                                                        onClick={() => handlePriorityChange(task.id, 60)}
-                                                        color="orange"
+                                                        onClick={() => handleImportanceChange(task.id, 50)}
+                                                        color="grape"
                                                     >
-                                                        中 (Medium)
+                                                        重要度: 中
                                                     </Menu.Item>
                                                     <Menu.Item
                                                         leftSection={<ArrowDown size={16} />}
-                                                        onClick={() => handlePriorityChange(task.id, 30)}
-                                                        color="blue"
+                                                        onClick={() => handleImportanceChange(task.id, 20)}
+                                                        color="indigo"
                                                     >
-                                                        低 (Low)
+                                                        重要度: 低
                                                     </Menu.Item>
                                                     <Menu.Divider />
                                                     <Menu.Item
-                                                        onClick={() => handlePriorityChange(task.id, null)}
+                                                        onClick={() => handleImportanceChange(task.id, null)}
                                                         color="gray"
                                                     >
-                                                        なし (None)
+                                                        なし
+                                                    </Menu.Item>
+                                                </Menu.Dropdown>
+                                            </Menu>
+                                        </Table.Td>
+
+                                        {/* Urgency Menu */}
+                                        <Table.Td onClick={(e) => e.stopPropagation()}>
+                                            <Menu shadow="md" width={160}>
+                                                <Menu.Target>
+                                                    {task.urgency !== null && task.urgency > 0 ? (
+                                                        <Badge
+                                                            color={
+                                                                task.urgency >= 80 ? 'red' :
+                                                                    task.urgency >= 50 ? 'orange' : 'yellow'
+                                                            }
+                                                            variant="light"
+                                                            size="sm"
+                                                            style={{ cursor: 'pointer', minHeight: '22px', display: 'inline-flex', alignItems: 'center' }}
+                                                            leftSection={
+                                                                task.urgency >= 80 ? <ArrowUp size={12} /> :
+                                                                    task.urgency >= 50 ? <ArrowRight size={12} /> :
+                                                                        <ArrowDown size={12} />
+                                                            }
+                                                        >
+                                                            {task.urgency >= 80 ? '高' :
+                                                                task.urgency >= 50 ? '中' : '低'}
+                                                        </Badge>
+                                                    ) : (
+                                                        <Badge
+                                                            color="gray"
+                                                            variant="light"
+                                                            size="sm"
+                                                            style={{ cursor: 'pointer', minHeight: '22px', display: 'inline-flex', alignItems: 'center' }}
+                                                        >
+                                                            -
+                                                        </Badge>
+                                                    )}
+                                                </Menu.Target>
+                                                <Menu.Dropdown>
+                                                    <Menu.Item
+                                                        leftSection={<ArrowUp size={16} />}
+                                                        onClick={() => handleUrgencyChange(task.id, 90)}
+                                                        color="red"
+                                                    >
+                                                        緊急度: 高
+                                                    </Menu.Item>
+                                                    <Menu.Item
+                                                        leftSection={<ArrowRight size={16} />}
+                                                        onClick={() => handleUrgencyChange(task.id, 50)}
+                                                        color="orange"
+                                                    >
+                                                        緊急度: 中
+                                                    </Menu.Item>
+                                                    <Menu.Item
+                                                        leftSection={<ArrowDown size={16} />}
+                                                        onClick={() => handleUrgencyChange(task.id, 20)}
+                                                        color="yellow"
+                                                    >
+                                                        緊急度: 低
+                                                    </Menu.Item>
+                                                    <Menu.Divider />
+                                                    <Menu.Item
+                                                        onClick={() => handleUrgencyChange(task.id, null)}
+                                                        color="gray"
+                                                    >
+                                                        なし
                                                     </Menu.Item>
                                                 </Menu.Dropdown>
                                             </Menu>

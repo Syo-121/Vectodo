@@ -1,6 +1,7 @@
-import { Card, Text, Badge, Stack, Group, useMantineColorScheme, useMantineTheme, ActionIcon } from '@mantine/core';
-import { Clock, AlertCircle, CheckCircle, Pencil } from 'lucide-react';
+import { Card, Text, Badge, Stack, Group, useMantineColorScheme, useMantineTheme, ActionIcon, Menu } from '@mantine/core';
+import { Clock, CheckCircle, Pencil, Zap, Flame, ArrowUp, ArrowRight, ArrowDown } from 'lucide-react';
 import type { Tables } from '../../supabase-types';
+import { useTaskStore } from '../../stores/taskStore';
 
 type Task = Tables<'tasks'>;
 
@@ -17,6 +18,28 @@ export function KanbanCard({ task, onDrillDown, onEdit }: KanbanCardProps) {
     const theme = useMantineTheme();
     const isDark = colorScheme === 'dark';
     const isDone = task.status?.toUpperCase() === 'DONE';
+
+    const { updateTaskImportance, updateTaskUrgency } = useTaskStore();
+
+    const handleImportanceChange = async (importance: number | null) => {
+        await updateTaskImportance(task.id, importance);
+    };
+
+    const handleUrgencyChange = async (urgency: number | null) => {
+        await updateTaskUrgency(task.id, urgency);
+    };
+
+    const getImportanceColor = (val: number) => {
+        if (val >= 80) return isDark ? 'violet' : 'violet';
+        if (val >= 50) return isDark ? 'grape' : 'grape';
+        return isDark ? 'indigo' : 'indigo';
+    };
+
+    const getUrgencyColor = (val: number) => {
+        if (val >= 80) return isDark ? 'red' : 'red';
+        if (val >= 50) return isDark ? 'orange' : 'orange';
+        return isDark ? 'yellow' : 'yellow';
+    };
 
     return (
         <Card
@@ -70,7 +93,7 @@ export function KanbanCard({ task, onDrillDown, onEdit }: KanbanCardProps) {
                     </Text>
                 )}
 
-                {/* Metadata */}
+                {/* Metadata Row 1: Deadlines & Time */}
                 <Group gap="xs" wrap="wrap">
                     {/* Deadline */}
                     {hasDeadline && (
@@ -87,32 +110,65 @@ export function KanbanCard({ task, onDrillDown, onEdit }: KanbanCardProps) {
                         </Badge>
                     )}
 
-                    {/* Priority/Importance */}
-                    {task.importance !== null && task.importance > 0 && (
-                        <Badge
-                            size="xs"
-                            color={task.importance >= 80 ? 'red' : task.importance >= 50 ? 'orange' : 'blue'}
-                            variant="light"
-                            leftSection={<AlertCircle size={12} />}
-                        >
-                            重要度 {task.importance}
-                        </Badge>
-                    )}
-
                     {/* Estimate time */}
                     {task.estimate_minutes !== null && task.estimate_minutes > 0 && (
                         <Badge size="xs" color="cyan" variant="light">
                             予定 {task.estimate_minutes}分
                         </Badge>
                     )}
-
-                    {/* Actual time */}
-                    {task.actual_minutes !== null && task.actual_minutes > 0 && (
-                        <Badge size="xs" color="green" variant="light">
-                            実績 {task.actual_minutes}分
-                        </Badge>
-                    )}
                 </Group>
+
+                {/* Metadata Row 2: Matrix (Importance/Urgency) */}
+                <Group gap="xs">
+                    {/* Importance Indicator */}
+                    <Menu shadow="md" width={150}>
+                        <Menu.Target>
+                            <Badge
+                                size="xs"
+                                variant="light"
+                                color={task.importance ? getImportanceColor(task.importance) : 'gray'}
+                                style={{ cursor: 'pointer', paddingLeft: 6, paddingRight: 8 }}
+                                leftSection={<Zap size={10} fill={task.importance && task.importance >= 80 ? "currentColor" : "none"} />}
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                {task.importance ? (task.importance >= 80 ? '高' : task.importance >= 50 ? '中' : '低') : '-'}
+                            </Badge>
+                        </Menu.Target>
+                        <Menu.Dropdown onClick={(e) => e.stopPropagation()}>
+                            <Menu.Label>重要度 (Importance)</Menu.Label>
+                            <Menu.Item leftSection={<ArrowUp size={14} />} onClick={() => handleImportanceChange(90)} color="violet">高 (High)</Menu.Item>
+                            <Menu.Item leftSection={<ArrowRight size={14} />} onClick={() => handleImportanceChange(50)} color="grape">中 (Medium)</Menu.Item>
+                            <Menu.Item leftSection={<ArrowDown size={14} />} onClick={() => handleImportanceChange(20)} color="indigo">低 (Low)</Menu.Item>
+                            <Menu.Divider />
+                            <Menu.Item onClick={() => handleImportanceChange(null)}>なし (None)</Menu.Item>
+                        </Menu.Dropdown>
+                    </Menu>
+
+                    {/* Urgency Indicator */}
+                    <Menu shadow="md" width={150}>
+                        <Menu.Target>
+                            <Badge
+                                size="xs"
+                                variant="light"
+                                color={task.urgency ? getUrgencyColor(task.urgency) : 'gray'}
+                                style={{ cursor: 'pointer', paddingLeft: 6, paddingRight: 8 }}
+                                leftSection={<Flame size={10} fill={task.urgency && task.urgency >= 80 ? "currentColor" : "none"} />}
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                {task.urgency ? (task.urgency >= 80 ? '高' : task.urgency >= 50 ? '中' : '低') : '-'}
+                            </Badge>
+                        </Menu.Target>
+                        <Menu.Dropdown onClick={(e) => e.stopPropagation()}>
+                            <Menu.Label>緊急度 (Urgency)</Menu.Label>
+                            <Menu.Item leftSection={<ArrowUp size={14} />} onClick={() => handleUrgencyChange(90)} color="red">高 (High)</Menu.Item>
+                            <Menu.Item leftSection={<ArrowRight size={14} />} onClick={() => handleUrgencyChange(50)} color="orange">中 (Medium)</Menu.Item>
+                            <Menu.Item leftSection={<ArrowDown size={14} />} onClick={() => handleUrgencyChange(20)} color="yellow">低 (Low)</Menu.Item>
+                            <Menu.Divider />
+                            <Menu.Item onClick={() => handleUrgencyChange(null)}>なし (None)</Menu.Item>
+                        </Menu.Dropdown>
+                    </Menu>
+                </Group>
+
 
                 {/* Completed date for done tasks */}
                 {isDone && task.completed_at && (
