@@ -2,6 +2,7 @@ import { Card, Text, Badge, Stack, Group, useMantineColorScheme, useMantineTheme
 import { Clock, CheckCircle, Pencil, Zap, Flame, ArrowUp, ArrowRight, ArrowDown } from 'lucide-react';
 import type { Tables } from '../../supabase-types';
 import { useTaskStore } from '../../stores/taskStore';
+import { getImportanceConfig, getUrgencyConfig } from '../../utils/taskUtils';
 
 type Task = Tables<'tasks'>;
 
@@ -29,17 +30,7 @@ export function KanbanCard({ task, onDrillDown, onEdit }: KanbanCardProps) {
         await updateTaskUrgency(task.id, urgency);
     };
 
-    const getImportanceColor = (val: number) => {
-        if (val >= 80) return isDark ? 'violet' : 'violet';
-        if (val >= 50) return isDark ? 'grape' : 'grape';
-        return isDark ? 'indigo' : 'indigo';
-    };
 
-    const getUrgencyColor = (val: number) => {
-        if (val >= 80) return isDark ? 'red' : 'red';
-        if (val >= 50) return isDark ? 'orange' : 'orange';
-        return isDark ? 'yellow' : 'yellow';
-    };
 
     return (
         <Card
@@ -126,12 +117,12 @@ export function KanbanCard({ task, onDrillDown, onEdit }: KanbanCardProps) {
                             <Badge
                                 size="xs"
                                 variant="light"
-                                color={task.importance ? getImportanceColor(task.importance) : 'gray'}
+                                color={task.importance ? getImportanceConfig(task.importance).color : 'gray'}
                                 style={{ cursor: 'pointer', paddingLeft: 6, paddingRight: 8 }}
                                 leftSection={<Zap size={10} fill={task.importance && task.importance >= 80 ? "currentColor" : "none"} />}
                                 onClick={(e) => e.stopPropagation()}
                             >
-                                {task.importance ? (task.importance >= 80 ? '高' : task.importance >= 50 ? '中' : '低') : '-'}
+                                {getImportanceConfig(task.importance).label}
                             </Badge>
                         </Menu.Target>
                         <Menu.Dropdown onClick={(e) => e.stopPropagation()}>
@@ -150,12 +141,12 @@ export function KanbanCard({ task, onDrillDown, onEdit }: KanbanCardProps) {
                             <Badge
                                 size="xs"
                                 variant="light"
-                                color={task.urgency ? getUrgencyColor(task.urgency) : 'gray'}
+                                color={task.urgency ? getUrgencyConfig(task.urgency).color : 'gray'}
                                 style={{ cursor: 'pointer', paddingLeft: 6, paddingRight: 8 }}
                                 leftSection={<Flame size={10} fill={task.urgency && task.urgency >= 80 ? "currentColor" : "none"} />}
                                 onClick={(e) => e.stopPropagation()}
                             >
-                                {task.urgency ? (task.urgency >= 80 ? '高' : task.urgency >= 50 ? '中' : '低') : '-'}
+                                {getUrgencyConfig(task.urgency).label}
                             </Badge>
                         </Menu.Target>
                         <Menu.Dropdown onClick={(e) => e.stopPropagation()}>
