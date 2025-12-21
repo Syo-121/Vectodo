@@ -2,7 +2,8 @@ import { Card, Text, Badge, Stack, Group, useMantineColorScheme, useMantineTheme
 import { Clock, CheckCircle, Pencil, Zap, Flame, ArrowUp, ArrowRight, ArrowDown } from 'lucide-react';
 import type { Tables } from '../../supabase-types';
 import { useTaskStore } from '../../stores/taskStore';
-import { getImportanceConfig, getUrgencyConfig } from '../../utils/taskUtils';
+import { getImportanceConfig } from '../../utils/taskUtils';
+import { calculateUrgencyFromDeadline } from '../../utils/urgency';
 
 type Task = Tables<'tasks'>;
 
@@ -20,15 +21,13 @@ export function KanbanCard({ task, onDrillDown, onEdit }: KanbanCardProps) {
     const isDark = colorScheme === 'dark';
     const isDone = task.status?.toUpperCase() === 'DONE';
 
-    const { updateTaskImportance, updateTaskUrgency } = useTaskStore();
+    const { updateTaskImportance } = useTaskStore();
 
     const handleImportanceChange = async (importance: number | null) => {
         await updateTaskImportance(task.id, importance);
     };
 
-    const handleUrgencyChange = async (urgency: number | null) => {
-        await updateTaskUrgency(task.id, urgency);
-    };
+
 
 
 
@@ -135,29 +134,22 @@ export function KanbanCard({ task, onDrillDown, onEdit }: KanbanCardProps) {
                         </Menu.Dropdown>
                     </Menu>
 
-                    {/* Urgency Indicator */}
-                    <Menu shadow="md" width={150}>
-                        <Menu.Target>
-                            <Badge
-                                size="xs"
-                                variant="light"
-                                color={task.urgency ? getUrgencyConfig(task.urgency).color : 'gray'}
-                                style={{ cursor: 'pointer', paddingLeft: 6, paddingRight: 8 }}
-                                leftSection={<Flame size={10} fill={task.urgency && task.urgency >= 80 ? "currentColor" : "none"} />}
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                {getUrgencyConfig(task.urgency).label}
-                            </Badge>
-                        </Menu.Target>
-                        <Menu.Dropdown onClick={(e) => e.stopPropagation()}>
-                            <Menu.Label>緊急度 (Urgency)</Menu.Label>
-                            <Menu.Item leftSection={<ArrowUp size={14} />} onClick={() => handleUrgencyChange(90)} color="red">高 (High)</Menu.Item>
-                            <Menu.Item leftSection={<ArrowRight size={14} />} onClick={() => handleUrgencyChange(50)} color="orange">中 (Medium)</Menu.Item>
-                            <Menu.Item leftSection={<ArrowDown size={14} />} onClick={() => handleUrgencyChange(20)} color="yellow">低 (Low)</Menu.Item>
-                            <Menu.Divider />
-                            <Menu.Item onClick={() => handleUrgencyChange(null)}>なし (None)</Menu.Item>
-                        </Menu.Dropdown>
-                    </Menu>
+                    {/* Urgency Indicator (Auto-calculated) */}
+                    <Badge
+                        size="xs"
+                        variant="light"
+                        color={(() => {
+                            const config = calculateUrgencyFromDeadline(task.deadline, task.status);
+                            return config.color;
+                        })()}
+                        style={{ paddingLeft: 6, paddingRight: 8 }}
+                        leftSection={<Flame size={10} fill={(() => {
+                            const config = calculateUrgencyFromDeadline(task.deadline, task.status);
+                            return config.level >= 80 ? "currentColor" : "none";
+                        })()} />}
+                    >
+                        {calculateUrgencyFromDeadline(task.deadline, task.status).label}
+                    </Badge>
                 </Group>
 
 

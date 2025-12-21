@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Stack, Text, Loader, Alert, Center, Checkbox, Table, ActionIcon, Badge, ScrollArea, Menu, TextInput, Group, Tooltip } from '@mantine/core';
 import { DateTimePicker } from '@mantine/dates';
-import { AlertCircle, Trash2, Circle, Play, Pause, CheckCircle, ArrowUp, ArrowRight, ArrowDown, FolderOpen, Pencil } from 'lucide-react';
+import { AlertCircle, Trash2, Circle, Play, Pause, CheckCircle, ArrowUp, ArrowRight, ArrowDown, FolderOpen, Pencil, Flame, Clock } from 'lucide-react';
 import { useTaskStore } from '../stores/taskStore';
 import { BulkActionBar } from './BulkActionBar';
 import type { Tables } from '../supabase-types';
-import { getStatusConfig, getImportanceConfig, getUrgencyConfig } from '../utils/taskUtils';
+import { getStatusConfig, getImportanceConfig } from '../utils/taskUtils';
+import { calculateUrgencyFromDeadline } from '../utils/urgency';
 
 type Task = Tables<'tasks'>;
 
@@ -25,7 +26,6 @@ export function TaskList({ onTaskClick }: TaskListProps) {
         completeTasks,
         updateTaskStatus,
         updateTaskImportance,
-        updateTaskUrgency,
         setCurrentProject
     } = useTaskStore();
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -84,10 +84,7 @@ export function TaskList({ onTaskClick }: TaskListProps) {
         await updateTaskImportance(taskId, importance);
     };
 
-    // Handle urgency change
-    const handleUrgencyChange = async (taskId: string, urgency: number | null) => {
-        await updateTaskUrgency(taskId, urgency);
-    };
+
 
     // Handle title inline editing
     const handleTitleUpdate = async (taskId: string, newTitle: string) => {
@@ -444,66 +441,27 @@ export function TaskList({ onTaskClick }: TaskListProps) {
                                             </Menu>
                                         </Table.Td>
 
-                                        {/* Urgency Menu */}
-                                        <Table.Td onClick={(e) => e.stopPropagation()}>
-                                            <Menu shadow="md" width={160}>
-                                                <Menu.Target>
-                                                    {task.urgency !== null && task.urgency > 0 ? (
-                                                        <Badge
-                                                            color={getUrgencyConfig(task.urgency).color}
-                                                            variant="light"
-                                                            size="sm"
-                                                            style={{ cursor: 'pointer', minHeight: '22px', display: 'inline-flex', alignItems: 'center' }}
-                                                            leftSection={
-                                                                task.urgency >= 80 ? <ArrowUp size={12} /> :
-                                                                    task.urgency >= 50 ? <ArrowRight size={12} /> :
-                                                                        <ArrowDown size={12} />
-                                                            }
-                                                        >
-                                                            {getUrgencyConfig(task.urgency).label}
-                                                        </Badge>
-                                                    ) : (
-                                                        <Badge
-                                                            color="gray"
-                                                            variant="light"
-                                                            size="sm"
-                                                            style={{ cursor: 'pointer', minHeight: '22px', display: 'inline-flex', alignItems: 'center' }}
-                                                        >
-                                                            -
-                                                        </Badge>
-                                                    )}
-                                                </Menu.Target>
-                                                <Menu.Dropdown>
-                                                    <Menu.Item
-                                                        leftSection={<ArrowUp size={16} />}
-                                                        onClick={() => handleUrgencyChange(task.id, 90)}
-                                                        color="red"
+                                        {/* Urgency Display (Auto-calculated) */}
+                                        <Table.Td>
+                                            {(() => {
+                                                const urgencyConfig = calculateUrgencyFromDeadline(task.deadline, task.status);
+                                                return (
+                                                    <Badge
+                                                        size="sm"
+                                                        variant="light"
+                                                        color={urgencyConfig.color}
+                                                        style={{ cursor: 'default', minHeight: '22px', display: 'inline-flex', alignItems: 'center' }}
+                                                        leftSection={
+                                                            urgencyConfig.icon === 'alert' ? <AlertCircle size={12} /> :
+                                                                urgencyConfig.icon === 'flame' ? <Flame size={12} /> :
+                                                                    urgencyConfig.icon === 'warning' ? <Clock size={12} /> :
+                                                                        null
+                                                        }
                                                     >
-                                                        緊急度: 高
-                                                    </Menu.Item>
-                                                    <Menu.Item
-                                                        leftSection={<ArrowRight size={16} />}
-                                                        onClick={() => handleUrgencyChange(task.id, 50)}
-                                                        color="orange"
-                                                    >
-                                                        緊急度: 中
-                                                    </Menu.Item>
-                                                    <Menu.Item
-                                                        leftSection={<ArrowDown size={16} />}
-                                                        onClick={() => handleUrgencyChange(task.id, 20)}
-                                                        color="yellow"
-                                                    >
-                                                        緊急度: 低
-                                                    </Menu.Item>
-                                                    <Menu.Divider />
-                                                    <Menu.Item
-                                                        onClick={() => handleUrgencyChange(task.id, null)}
-                                                        color="gray"
-                                                    >
-                                                        なし
-                                                    </Menu.Item>
-                                                </Menu.Dropdown>
-                                            </Menu>
+                                                        {urgencyConfig.label}
+                                                    </Badge>
+                                                );
+                                            })()}
                                         </Table.Td>
 
                                         {/* Title column: Folder icon + Input */}
