@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { Stack, Text, Loader, Alert, Center, Checkbox, Table, ActionIcon, Badge, Group, ScrollArea } from '@mantine/core';
-import { AlertCircle, Pencil, Trash2 } from 'lucide-react';
+import { Stack, Text, Loader, Alert, Center, Checkbox, Table, ActionIcon, Badge, ScrollArea, Menu, TextInput } from '@mantine/core';
+import { DateTimePicker } from '@mantine/dates';
+import { AlertCircle, Trash2, Circle, Play, Pause, CheckCircle, ArrowUp, ArrowRight, ArrowDown } from 'lucide-react';
 import SelectionArea from '@simonwep/selection-js';
 import { useTaskStore } from '../stores/taskStore';
 import { BulkActionBar } from './BulkActionBar';
@@ -27,6 +28,8 @@ export function TaskList({ onTaskClick }: TaskListProps) {
         setCurrentProject
     } = useTaskStore();
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+    const [editingTitle, setEditingTitle] = useState<string>('');
     const selectionRef = useRef<SelectionArea | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const lastDragTimeRef = useRef<number>(0);
@@ -71,6 +74,109 @@ export function TaskList({ onTaskClick }: TaskListProps) {
         if (!task) return;
         const newStatus = task.status === 'DONE' ? 'TODO' : 'DONE';
         await updateTaskStatus(taskId, newStatus);
+    };
+
+    // Handle status change from menu (supports all statuses)
+    const handleStatusChange = async (taskId: string, newStatus: string) => {
+        await updateTaskStatus(taskId, newStatus);
+    };
+
+    // Handle priority change from menu
+    const handlePriorityChange = async (taskId: string, importance: number | null) => {
+        const task = tasks.find(t => t.id === taskId);
+        if (!task) return;
+
+        // Direct Supabase update for importance
+        const { supabase } = await import('../lib/supabaseClient');
+        const { error } = await supabase
+            .from('tasks')
+            .update({ importance })
+            .eq('id', taskId);
+
+        if (error) {
+            console.error('Failed to update importance:', error);
+            return;
+        }
+
+        // Refresh tasks to get updated data
+        await fetchTasks();
+    };
+
+    // Handle title inline editing
+    const handleTitleUpdate = async (taskId: string, newTitle: string) => {
+        if (!newTitle.trim()) {
+            setEditingTaskId(null);
+            setEditingTitle('');
+            return;
+        }
+
+        const { supabase } = await import('../lib/supabaseClient');
+        const { error } = await supabase
+            .from('tasks')
+            .update({ title: newTitle.trim() })
+            .eq('id', taskId);
+
+        if (error) {
+            console.error('Failed to update title:', error);
+        }
+
+        setEditingTaskId(null);
+        setEditingTitle('');
+        await fetchTasks();
+    };
+
+    // Handle schedule start time change
+    const handleScheduleStartChange = async (taskId: string, dateValue: string | null) => {
+        const date = dateValue ? new Date(dateValue) : null;
+        const { supabase } = await import('../lib/supabaseClient');
+        const { error } = await supabase
+            .from('tasks')
+            .update({
+                planned_start: date?.toISOString() ?? null,
+                planned_end: null // Clear end when changing start independently
+            })
+            .eq('id', taskId);
+
+        if (error) {
+            console.error('Failed to update schedule:', error);
+            return;
+        }
+
+        await fetchTasks();
+    };
+
+    // Handle schedule end time change
+    const handleScheduleEndChange = async (taskId: string, dateValue: string | null) => {
+        const date = dateValue ? new Date(dateValue) : null;
+        const { supabase } = await import('../lib/supabaseClient');
+        const { error } = await supabase
+            .from('tasks')
+            .update({ planned_end: date?.toISOString() ?? null })
+            .eq('id', taskId);
+
+        if (error) {
+            console.error('Failed to update schedule end:', error);
+            return;
+        }
+
+        await fetchTasks();
+    };
+
+    // Handle deadline change
+    const handleDeadlineChange = async (taskId: string, dateValue: string | null) => {
+        const date = dateValue ? new Date(dateValue) : null;
+        const { supabase } = await import('../lib/supabaseClient');
+        const { error } = await supabase
+            .from('tasks')
+            .update({ deadline: date?.toISOString() ?? null })
+            .eq('id', taskId);
+
+        if (error) {
+            console.error('Failed to update deadline:', error);
+            return;
+        }
+
+        await fetchTasks();
     };
 
     // Handle single task delete
@@ -333,7 +439,15 @@ export function TaskList({ onTaskClick }: TaskListProps) {
                 </Text>
 
                 <ScrollArea>
-                    <Table highlightOnHover verticalSpacing="sm" withTableBorder>
+                    <Table
+                        highlightOnHover
+                        verticalSpacing="xs"
+                        withTableBorder
+                        styles={{
+                            th: { paddingTop: '6px', paddingBottom: '6px', verticalAlign: 'middle' },
+                            td: { paddingTop: '4px', paddingBottom: '4px', verticalAlign: 'middle' }
+                        }}
+                    >
                         <Table.Thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--mantine-color-body)' }}>
                             <Table.Tr>
                                 <Table.Th style={{ width: '50px' }}>
@@ -345,11 +459,14 @@ export function TaskList({ onTaskClick }: TaskListProps) {
                                         size="sm"
                                     />
                                 </Table.Th>
-                                <Table.Th style={{ width: '60px' }}>状態</Table.Th>
+                                <Table.Th style={{ width: '60px' }}>完了</Table.Th>
+                                <Table.Th style={{ width: '120px' }}>ステータス</Table.Th>
+                                <Table.Th style={{ width: '120px' }}>優先度</Table.Th>
                                 <Table.Th>タイトル</Table.Th>
-                                <Table.Th style={{ width: '100px' }}>優先度</Table.Th>
-                                <Table.Th style={{ width: '120px' }}>期限</Table.Th>
-                                <Table.Th style={{ width: '100px' }}>操作</Table.Th>
+                                <Table.Th style={{ width: '140px' }}>開始</Table.Th>
+                                <Table.Th style={{ width: '140px' }}>終了</Table.Th>
+                                <Table.Th style={{ width: '150px' }}>期限</Table.Th>
+                                <Table.Th style={{ width: '80px' }}>操作</Table.Th>
                             </Table.Tr>
                         </Table.Thead>
                         <Table.Tbody>
@@ -390,67 +507,221 @@ export function TaskList({ onTaskClick }: TaskListProps) {
                                             />
                                         </Table.Td>
 
-                                        {/* Title */}
-                                        <Table.Td>
-                                            <Text truncate style={{ maxWidth: '400px' }}>
-                                                {task.title}
-                                            </Text>
+                                        {/* Status Menu */}
+                                        <Table.Td onClick={(e) => e.stopPropagation()}>
+                                            <Menu shadow="md" width={180}>
+                                                <Menu.Target>
+                                                    <Badge
+                                                        color={
+                                                            task.status === 'DONE' ? 'green' :
+                                                                task.status === 'DOING' || task.status === 'IN_PROGRESS' ? 'blue' :
+                                                                    task.status === 'PENDING' ? 'yellow' : 'gray'
+                                                        }
+                                                        variant="light"
+                                                        size="sm"
+                                                        style={{ cursor: 'pointer', minHeight: '22px', display: 'inline-flex', alignItems: 'center' }}
+                                                    >
+                                                        {task.status === 'DONE' ? 'Done' :
+                                                            task.status === 'DOING' || task.status === 'IN_PROGRESS' ? 'In Progress' :
+                                                                task.status === 'PENDING' ? 'Pending' : 'To Do'}
+                                                    </Badge>
+                                                </Menu.Target>
+                                                <Menu.Dropdown>
+                                                    <Menu.Item
+                                                        leftSection={<Circle size={16} />}
+                                                        onClick={() => handleStatusChange(task.id, 'TODO')}
+                                                    >
+                                                        To Do
+                                                    </Menu.Item>
+                                                    <Menu.Item
+                                                        leftSection={<Play size={16} />}
+                                                        onClick={() => handleStatusChange(task.id, 'DOING')}
+                                                        color="blue"
+                                                    >
+                                                        In Progress
+                                                    </Menu.Item>
+                                                    <Menu.Item
+                                                        leftSection={<Pause size={16} />}
+                                                        onClick={() => handleStatusChange(task.id, 'PENDING')}
+                                                        color="yellow"
+                                                    >
+                                                        Pending
+                                                    </Menu.Item>
+                                                    <Menu.Item
+                                                        leftSection={<CheckCircle size={16} />}
+                                                        onClick={() => handleStatusChange(task.id, 'DONE')}
+                                                        color="green"
+                                                    >
+                                                        Done
+                                                    </Menu.Item>
+                                                </Menu.Dropdown>
+                                            </Menu>
                                         </Table.Td>
 
-                                        {/* Priority */}
-                                        <Table.Td>
-                                            {task.importance !== null && task.importance > 0 && (
-                                                <Badge
-                                                    color={
-                                                        task.importance >= 80 ? 'red' :
-                                                            task.importance >= 50 ? 'orange' : 'blue'
+                                        {/* Priority Menu */}
+                                        <Table.Td onClick={(e) => e.stopPropagation()}>
+                                            <Menu shadow="md" width={160}>
+                                                <Menu.Target>
+                                                    {task.importance !== null && task.importance > 0 ? (
+                                                        <Badge
+                                                            color={
+                                                                task.importance >= 80 ? 'red' :
+                                                                    task.importance >= 50 ? 'orange' : 'blue'
+                                                            }
+                                                            variant="light"
+                                                            size="sm"
+                                                            style={{ cursor: 'pointer', minHeight: '22px', display: 'inline-flex', alignItems: 'center' }}
+                                                            leftSection={
+                                                                task.importance >= 80 ? <ArrowUp size={12} /> :
+                                                                    task.importance >= 50 ? <ArrowRight size={12} /> :
+                                                                        <ArrowDown size={12} />
+                                                            }
+                                                        >
+                                                            {task.importance >= 80 ? '高' :
+                                                                task.importance >= 50 ? '中' : '低'}
+                                                        </Badge>
+                                                    ) : (
+                                                        <Badge
+                                                            color="gray"
+                                                            variant="light"
+                                                            size="sm"
+                                                            style={{ cursor: 'pointer', minHeight: '22px', display: 'inline-flex', alignItems: 'center' }}
+                                                        >
+                                                            なし
+                                                        </Badge>
+                                                    )}
+                                                </Menu.Target>
+                                                <Menu.Dropdown>
+                                                    <Menu.Item
+                                                        leftSection={<ArrowUp size={16} />}
+                                                        onClick={() => handlePriorityChange(task.id, 90)}
+                                                        color="red"
+                                                    >
+                                                        高 (High)
+                                                    </Menu.Item>
+                                                    <Menu.Item
+                                                        leftSection={<ArrowRight size={16} />}
+                                                        onClick={() => handlePriorityChange(task.id, 60)}
+                                                        color="orange"
+                                                    >
+                                                        中 (Medium)
+                                                    </Menu.Item>
+                                                    <Menu.Item
+                                                        leftSection={<ArrowDown size={16} />}
+                                                        onClick={() => handlePriorityChange(task.id, 30)}
+                                                        color="blue"
+                                                    >
+                                                        低 (Low)
+                                                    </Menu.Item>
+                                                    <Menu.Divider />
+                                                    <Menu.Item
+                                                        onClick={() => handlePriorityChange(task.id, null)}
+                                                        color="gray"
+                                                    >
+                                                        なし (None)
+                                                    </Menu.Item>
+                                                </Menu.Dropdown>
+                                            </Menu>
+                                        </Table.Td>
+
+                                        {/* Title - Inline Editable */}
+                                        <Table.Td onClick={(e) => e.stopPropagation()}>
+                                            <TextInput
+                                                value={editingTaskId === task.id ? editingTitle : task.title}
+                                                onChange={(e) => {
+                                                    if (editingTaskId !== task.id) {
+                                                        setEditingTaskId(task.id);
+                                                        setEditingTitle(e.target.value);
+                                                    } else {
+                                                        setEditingTitle(e.target.value);
                                                     }
-                                                    variant="light"
-                                                    size="sm"
-                                                >
-                                                    {task.importance >= 80 ? '高' :
-                                                        task.importance >= 50 ? '中' : '低'}
-                                                </Badge>
-                                            )}
+                                                }}
+                                                onFocus={() => {
+                                                    setEditingTaskId(task.id);
+                                                    setEditingTitle(task.title);
+                                                }}
+                                                onBlur={() => {
+                                                    if (editingTaskId === task.id && editingTitle !== task.title) {
+                                                        handleTitleUpdate(task.id, editingTitle);
+                                                    } else {
+                                                        setEditingTaskId(null);
+                                                        setEditingTitle('');
+                                                    }
+                                                }}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.currentTarget.blur();
+                                                    } else if (e.key === 'Escape') {
+                                                        setEditingTaskId(null);
+                                                        setEditingTitle('');
+                                                        e.currentTarget.blur();
+                                                    }
+                                                }}
+                                                variant="unstyled"
+                                                size="sm"
+                                                style={{ maxWidth: '400px' }}
+                                            />
                                         </Table.Td>
 
-                                        {/* Due Date */}
-                                        <Table.Td>
-                                            {task.deadline && (
-                                                <Text size="sm" c={isOverdue ? 'red' : 'dimmed'}>
-                                                    {new Date(task.deadline).toLocaleDateString('ja-JP', {
-                                                        month: 'short',
-                                                        day: 'numeric',
-                                                    })}
-                                                </Text>
-                                            )}
+
+                                        {/* Schedule Start - Inline Editable */}
+                                        <Table.Td onClick={(e) => e.stopPropagation()}>
+                                            <DateTimePicker
+                                                value={task.planned_start ? task.planned_start : null}
+                                                onChange={(date) => handleScheduleStartChange(task.id, date)}
+                                                clearable
+                                                placeholder="未設定"
+                                                size="xs"
+                                                variant="unstyled"
+                                                valueFormat="M月D日 HH:mm"
+                                                style={{ width: '100%' }}
+                                            />
+                                        </Table.Td>
+
+                                        {/* Schedule End - Inline Editable */}
+                                        <Table.Td onClick={(e) => e.stopPropagation()}>
+                                            <DateTimePicker
+                                                value={task.planned_end ? task.planned_end : null}
+                                                onChange={(date) => handleScheduleEndChange(task.id, date)}
+                                                clearable
+                                                placeholder="未設定"
+                                                size="xs"
+                                                variant="unstyled"
+                                                valueFormat="M月D日 HH:mm"
+                                                style={{ width: '100%' }}
+                                            />
+                                        </Table.Td>
+
+                                        {/* Deadline - Inline Editable */}
+                                        <Table.Td onClick={(e) => e.stopPropagation()}>
+                                            <DateTimePicker
+                                                value={task.deadline ? task.deadline : null}
+                                                onChange={(date) => handleDeadlineChange(task.id, date)}
+                                                clearable
+                                                placeholder="未設定"
+                                                size="xs"
+                                                variant="unstyled"
+                                                valueFormat="M月D日"
+                                                style={{
+                                                    width: '100%',
+                                                    color: isOverdue && task.deadline ? 'var(--mantine-color-red-6)' : undefined
+                                                }}
+                                            />
                                         </Table.Td>
 
                                         {/* Actions */}
                                         <Table.Td onClick={(e) => e.stopPropagation()}>
-                                            <Group gap="xs">
-                                                <ActionIcon
-                                                    size="sm"
-                                                    variant="subtle"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        onTaskClick?.(task);
-                                                    }}
-                                                >
-                                                    <Pencil size={16} />
-                                                </ActionIcon>
-                                                <ActionIcon
-                                                    size="sm"
-                                                    variant="subtle"
-                                                    color="red"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleDelete(task.id);
-                                                    }}
-                                                >
-                                                    <Trash2 size={16} />
-                                                </ActionIcon>
-                                            </Group>
+                                            <ActionIcon
+                                                size="sm"
+                                                variant="subtle"
+                                                color="red"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleDelete(task.id);
+                                                }}
+                                            >
+                                                <Trash2 size={16} />
+                                            </ActionIcon>
                                         </Table.Td>
                                     </Table.Tr>
                                 );
