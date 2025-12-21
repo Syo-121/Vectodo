@@ -5,6 +5,7 @@ import { AlertCircle, Trash2, Circle, Play, Pause, CheckCircle, ArrowUp, ArrowRi
 import { useTaskStore } from '../stores/taskStore';
 import { BulkActionBar } from './BulkActionBar';
 import type { Tables } from '../supabase-types';
+import { getStatusConfig, getImportanceConfig, getUrgencyConfig } from '../utils/taskUtils';
 
 type Task = Tables<'tasks'>;
 
@@ -341,18 +342,12 @@ export function TaskList({ onTaskClick }: TaskListProps) {
                                             <Menu shadow="md" width={180}>
                                                 <Menu.Target>
                                                     <Badge
-                                                        color={
-                                                            task.status === 'DONE' ? 'green' :
-                                                                task.status === 'DOING' || task.status === 'IN_PROGRESS' ? 'blue' :
-                                                                    task.status === 'PENDING' ? 'yellow' : 'gray'
-                                                        }
+                                                        color={getStatusConfig(task.status).color}
                                                         variant="light"
                                                         size="sm"
                                                         style={{ cursor: 'pointer', minHeight: '22px', display: 'inline-flex', alignItems: 'center' }}
                                                     >
-                                                        {task.status === 'DONE' ? 'Done' :
-                                                            task.status === 'DOING' || task.status === 'IN_PROGRESS' ? 'In Progress' :
-                                                                task.status === 'PENDING' ? 'Pending' : 'To Do'}
+                                                        {getStatusConfig(task.status).label}
                                                     </Badge>
                                                 </Menu.Target>
                                                 <Menu.Dropdown>
@@ -393,10 +388,7 @@ export function TaskList({ onTaskClick }: TaskListProps) {
                                                 <Menu.Target>
                                                     {task.importance !== null && task.importance > 0 ? (
                                                         <Badge
-                                                            color={
-                                                                task.importance >= 80 ? 'violet' :
-                                                                    task.importance >= 50 ? 'grape' : 'indigo'
-                                                            }
+                                                            color={getImportanceConfig(task.importance).color}
                                                             variant="light"
                                                             size="sm"
                                                             style={{ cursor: 'pointer', minHeight: '22px', display: 'inline-flex', alignItems: 'center' }}
@@ -406,8 +398,7 @@ export function TaskList({ onTaskClick }: TaskListProps) {
                                                                         <ArrowDown size={12} />
                                                             }
                                                         >
-                                                            {task.importance >= 80 ? '高' :
-                                                                task.importance >= 50 ? '中' : '低'}
+                                                            {getImportanceConfig(task.importance).label}
                                                         </Badge>
                                                     ) : (
                                                         <Badge
@@ -459,10 +450,7 @@ export function TaskList({ onTaskClick }: TaskListProps) {
                                                 <Menu.Target>
                                                     {task.urgency !== null && task.urgency > 0 ? (
                                                         <Badge
-                                                            color={
-                                                                task.urgency >= 80 ? 'red' :
-                                                                    task.urgency >= 50 ? 'orange' : 'yellow'
-                                                            }
+                                                            color={getUrgencyConfig(task.urgency).color}
                                                             variant="light"
                                                             size="sm"
                                                             style={{ cursor: 'pointer', minHeight: '22px', display: 'inline-flex', alignItems: 'center' }}
@@ -472,8 +460,7 @@ export function TaskList({ onTaskClick }: TaskListProps) {
                                                                         <ArrowDown size={12} />
                                                             }
                                                         >
-                                                            {task.urgency >= 80 ? '高' :
-                                                                task.urgency >= 50 ? '中' : '低'}
+                                                            {getUrgencyConfig(task.urgency).label}
                                                         </Badge>
                                                     ) : (
                                                         <Badge

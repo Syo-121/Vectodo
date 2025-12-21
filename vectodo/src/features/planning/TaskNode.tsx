@@ -3,6 +3,7 @@ import { Handle, Position, type NodeProps } from 'reactflow';
 import { Paper, Text, Badge, Group, Stack, useMantineColorScheme, ThemeIcon } from '@mantine/core';
 import { Calendar, AlertCircle } from 'lucide-react';
 import dayjs from 'dayjs';
+import { getStatusConfig } from '../../utils/taskUtils';
 
 interface TaskNodeData {
     title: string;
@@ -16,14 +17,7 @@ export const TaskNode = memo(({ data, selected }: NodeProps<TaskNodeData>) => {
     const { colorScheme } = useMantineColorScheme();
     const isDark = colorScheme === 'dark';
 
-    // Status config
-    const getStatusConfig = (status: string | null | undefined) => {
-        const s = status?.toUpperCase();
-        if (s === 'DONE') return { color: 'green', label: 'Done' };
-        if (s === 'DOING' || s === 'IN_PROGRESS') return { color: 'blue', label: 'In Progress' };
-        if (s === 'PENDING') return { color: 'orange', label: 'Pending' };
-        return { color: 'gray', label: 'To Do' };
-    };
+
 
     const statusConfig = getStatusConfig(data.status);
     const borderColor = statusConfig.color;
