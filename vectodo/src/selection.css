@@ -32,3 +32,41 @@
     pointer-events: all;
     z-index: 100;
 }
+
+/* Table row selection styles */
+.task-row {
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+/* Permanent selection (after drag completes) */
+.task-row.selected {
+    background-color: rgba(34, 139, 230, 0.15) !important;
+}
+
+/* Temporary selection (during drag) */
+.task-row.temp-selected {
+    background-color: rgba(34, 139, 230, 0.1) !important;
+}
+
+/* Dark mode overrides */
+[data-mantine-color-scheme='dark'] .task-row.selected {
+    background-color: rgba(34, 139, 230, 0.25) !important;
+}
+
+[data-mantine-color-scheme='dark'] .task-row.temp-selected {
+    background-color: rgba(34, 139, 230, 0.15) !important;
+}
+
+/* Sticky header background */
+.mantine-Table-thead {
+    z-index: 10;
+}
+
+[data-mantine-color-scheme='light'] .mantine-Table-thead {
+    background-color: white;
+}
+
+[data-mantine-color-scheme='dark'] .mantine-Table-thead {
+    background-color: var(--mantine-color-dark-7);
+}

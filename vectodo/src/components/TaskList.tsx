@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { Stack, Text, Loader, Alert, Center, SimpleGrid, Checkbox } from '@mantine/core';
-import { AlertCircle, CheckSquare } from 'lucide-react';
+import { Stack, Text, Loader, Alert, Center, Checkbox, Table, ActionIcon, Badge, Group, ScrollArea } from '@mantine/core';
+import { AlertCircle, Pencil, Trash2 } from 'lucide-react';
 import SelectionArea from '@simonwep/selection-js';
 import { useTaskStore } from '../stores/taskStore';
-import { TaskCard } from './TaskCard';
 import { BulkActionBar } from './BulkActionBar';
 import '../selection.css';
 import type { Tables } from '../supabase-types';
@@ -15,7 +14,18 @@ interface TaskListProps {
 }
 
 export function TaskList({ onTaskClick }: TaskListProps) {
-    const { tasks, loading, error, fetchTasks, showCompletedTasks, currentProjectId, deleteTasks, completeTasks } = useTaskStore();
+    const {
+        tasks,
+        loading,
+        error,
+        fetchTasks,
+        showCompletedTasks,
+        currentProjectId,
+        deleteTasks,
+        completeTasks,
+        updateTaskStatus,
+        setCurrentProject
+    } = useTaskStore();
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const selectionRef = useRef<SelectionArea | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -41,19 +51,6 @@ export function TaskList({ onTaskClick }: TaskListProps) {
         });
     }, [tasks, currentProjectId, showCompletedTasks]);
 
-    // Handle selection toggle
-    const toggleSelection = (taskId: string) => {
-        setSelectedIds(prev => {
-            const newSet = new Set(prev);
-            if (newSet.has(taskId)) {
-                newSet.delete(taskId);
-            } else {
-                newSet.add(taskId);
-            }
-            return newSet;
-        });
-    };
-
     // Handle bulk operations
     const handleBulkComplete = async () => {
         await completeTasks(Array.from(selectedIds), true);
@@ -65,14 +62,34 @@ export function TaskList({ onTaskClick }: TaskListProps) {
         setSelectedIds(new Set());
     };
 
+    // Handle status toggle (checkbox)
+    const handleStatusToggle = async (taskId: string) => {
+        const task = tasks.find(t => t.id === taskId);
+        if (!task) return;
+        const newStatus = task.status === 'DONE' ? 'TODO' : 'DONE';
+        await updateTaskStatus(taskId, newStatus);
+    };
+
+    // Handle single task delete
+    const handleDelete = async (taskId: string) => {
+        if (confirm('このタスクを削除しますか？')) {
+            await deleteTasks([taskId]);
+        }
+    };
+
+    // Handle row click for drill-down
+    const handleRowClick = (task: Task) => {
+        setCurrentProject(task.id);
+    };
+
     const handleCancelSelection = () => {
         setSelectedIds(new Set());
         // Clear Selection.js internal cache
         if (selectionRef.current) {
             selectionRef.current.clearSelection();
         }
-        // Clear visual selection
-        document.querySelectorAll('.task-card.selected, .task-card.temp-selected').forEach(el => {
+        // Clear visual selection - updated for task-row
+        document.querySelectorAll('.task-row.selected, .task-row.temp-selected').forEach(el => {
             el.classList.remove('selected', 'temp-selected');
         });
     };
@@ -91,7 +108,7 @@ export function TaskList({ onTaskClick }: TaskListProps) {
             console.log('[Selection] Initializing Selection.js');
 
             const selection = new SelectionArea({
-                selectables: ['.task-card'],
+                selectables: ['.task-row'], // Updated for table rows
                 boundaries: ['.task-list-container'], // Limit to task list container only
             })
                 .on('start', ({ event }) => {
@@ -100,7 +117,7 @@ export function TaskList({ onTaskClick }: TaskListProps) {
                     if (!(event as any)?.shiftKey) {
                         setSelectedIds(new Set());
                         // Clear visual selection
-                        document.querySelectorAll('.task-card.selected, .task-card.temp-selected').forEach(el => {
+                        document.querySelectorAll('.task-row.selected, .task-row.temp-selected').forEach(el => {
                             el.classList.remove('selected', 'temp-selected');
                         });
                     }
@@ -128,7 +145,7 @@ export function TaskList({ onTaskClick }: TaskListProps) {
                     // NOW update state with final selection (only once!)
                     const finalIds = new Set<string>();
                     store.stored.forEach(el => {
-                        const taskId = el.getAttribute('data-id');
+                        const taskId = el.getAttribute('data-task-id'); // Updated for table rows
                         if (taskId) {
                             finalIds.add(taskId);
                             // Replace temp class with permanent selected class
@@ -264,7 +281,7 @@ export function TaskList({ onTaskClick }: TaskListProps) {
         return (
             <Center h={300}>
                 <Stack align="center" gap="md">
-                    <CheckSquare size={48} strokeWidth={1.5} opacity={0.3} />
+                    <AlertCircle size={48} strokeWidth={1.5} opacity={0.3} />
                     <Text c="dimmed" size="lg">
                         タスクがありません
                     </Text>
@@ -287,39 +304,111 @@ export function TaskList({ onTaskClick }: TaskListProps) {
                 <Text size="sm" c="dimmed">
                     {displayTasks.length}件のタスク
                 </Text>
-                <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
-                    {displayTasks.map((task) => (
-                        <div
-                            key={task.id}
-                            className="task-card"
-                            data-id={task.id}
-                            style={{ position: 'relative' }}
-                        >
-                            {/* Selection Checkbox */}
-                            <Checkbox
-                                checked={selectedIds.has(task.id)}
-                                onChange={() => toggleSelection(task.id)}
-                                style={{
-                                    position: 'absolute',
-                                    top: '8px',
-                                    left: '8px',
-                                    zIndex: 10,
-                                }}
-                                size="sm"
-                            />
-                            <div style={{
-                                opacity: selectedIds.has(task.id) ? 0.8 : 1,
-                                border: selectedIds.has(task.id) ? '2px solid #5c7cfa' : undefined,
-                                borderRadius: '8px',
-                            }}>
-                                <TaskCard
-                                    task={task}
-                                    onEdit={() => onTaskClick?.(task)}
-                                />
-                            </div>
-                        </div>
-                    ))}
-                </SimpleGrid>
+
+                <ScrollArea>
+                    <Table highlightOnHover verticalSpacing="sm" withTableBorder>
+                        <Table.Thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--mantine-color-body)' }}>
+                            <Table.Tr>
+                                <Table.Th style={{ width: '60px' }}>状態</Table.Th>
+                                <Table.Th>タイトル</Table.Th>
+                                <Table.Th style={{ width: '100px' }}>優先度</Table.Th>
+                                <Table.Th style={{ width: '120px' }}>期限</Table.Th>
+                                <Table.Th style={{ width: '100px' }}>操作</Table.Th>
+                            </Table.Tr>
+                        </Table.Thead>
+                        <Table.Tbody>
+                            {displayTasks.map((task) => {
+                                const isOverdue = task.deadline && new Date(task.deadline) < new Date();
+                                const isSelected = selectedIds.has(task.id);
+
+                                return (
+                                    <Table.Tr
+                                        key={task.id}
+                                        className={`task-row ${isSelected ? 'selected' : ''}`}
+                                        data-task-id={task.id}
+                                        onClick={() => handleRowClick(task)}
+                                        style={{
+                                            cursor: 'pointer',
+                                            opacity: isSelected ? 0.9 : 1,
+                                        }}
+                                    >
+                                        {/* Status Checkbox */}
+                                        <Table.Td onClick={(e) => e.stopPropagation()}>
+                                            <Checkbox
+                                                checked={task.status === 'DONE'}
+                                                onChange={() => handleStatusToggle(task.id)}
+                                                size="sm"
+                                            />
+                                        </Table.Td>
+
+                                        {/* Title */}
+                                        <Table.Td>
+                                            <Text truncate style={{ maxWidth: '400px' }}>
+                                                {task.title}
+                                            </Text>
+                                        </Table.Td>
+
+                                        {/* Priority */}
+                                        <Table.Td>
+                                            {task.importance !== null && task.importance > 0 && (
+                                                <Badge
+                                                    color={
+                                                        task.importance >= 80 ? 'red' :
+                                                            task.importance >= 50 ? 'orange' : 'blue'
+                                                    }
+                                                    variant="light"
+                                                    size="sm"
+                                                >
+                                                    {task.importance >= 80 ? '高' :
+                                                        task.importance >= 50 ? '中' : '低'}
+                                                </Badge>
+                                            )}
+                                        </Table.Td>
+
+                                        {/* Due Date */}
+                                        <Table.Td>
+                                            {task.deadline && (
+                                                <Text size="sm" c={isOverdue ? 'red' : 'dimmed'}>
+                                                    {new Date(task.deadline).toLocaleDateString('ja-JP', {
+                                                        month: 'short',
+                                                        day: 'numeric',
+                                                    })}
+                                                </Text>
+                                            )}
+                                        </Table.Td>
+
+                                        {/* Actions */}
+                                        <Table.Td onClick={(e) => e.stopPropagation()}>
+                                            <Group gap="xs">
+                                                <ActionIcon
+                                                    size="sm"
+                                                    variant="subtle"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onTaskClick?.(task);
+                                                    }}
+                                                >
+                                                    <Pencil size={16} />
+                                                </ActionIcon>
+                                                <ActionIcon
+                                                    size="sm"
+                                                    variant="subtle"
+                                                    color="red"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleDelete(task.id);
+                                                    }}
+                                                >
+                                                    <Trash2 size={16} />
+                                                </ActionIcon>
+                                            </Group>
+                                        </Table.Td>
+                                    </Table.Tr>
+                                );
+                            })}
+                        </Table.Tbody>
+                    </Table>
+                </ScrollArea>
             </Stack>
 
             {/* Bulk Action Bar */}
