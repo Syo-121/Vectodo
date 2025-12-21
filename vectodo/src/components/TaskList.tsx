@@ -1,11 +1,9 @@
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Stack, Text, Loader, Alert, Center, Checkbox, Table, ActionIcon, Badge, ScrollArea, Menu, TextInput } from '@mantine/core';
 import { DateTimePicker } from '@mantine/dates';
 import { AlertCircle, Trash2, Circle, Play, Pause, CheckCircle, ArrowUp, ArrowRight, ArrowDown } from 'lucide-react';
-import SelectionArea from '@simonwep/selection-js';
 import { useTaskStore } from '../stores/taskStore';
 import { BulkActionBar } from './BulkActionBar';
-import '../selection.css';
 import type { Tables } from '../supabase-types';
 
 type Task = Tables<'tasks'>;
@@ -30,9 +28,6 @@ export function TaskList({ onTaskClick }: TaskListProps) {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
     const [editingTitle, setEditingTitle] = useState<string>('');
-    const selectionRef = useRef<SelectionArea | null>(null);
-    const containerRef = useRef<HTMLDivElement>(null);
-    const lastDragTimeRef = useRef<number>(0);
 
     useEffect(() => {
         fetchTasks();
@@ -217,188 +212,15 @@ export function TaskList({ onTaskClick }: TaskListProps) {
 
     const handleCancelSelection = () => {
         setSelectedIds(new Set());
-        // Clear Selection.js internal cache
-        if (selectionRef.current) {
-            selectionRef.current.clearSelection();
-        }
         // Clear visual selection - updated for task-row
-        document.querySelectorAll('.task-row.selected, .task-row.temp-selected').forEach(el => {
-            el.classList.remove('selected', 'temp-selected');
+        document.querySelectorAll('.task-row.selected').forEach(el => {
+            el.classList.remove('selected');
         });
     };
 
 
 
-    // Initialize Selection.js for drag-to-select
-    useEffect(() => {
-        // Wait for container to be available
-        const timer = setTimeout(() => {
-            if (!containerRef.current) {
-                console.warn('[Selection] Container not ready');
-                return;
-            }
 
-            console.log('[Selection] Initializing Selection.js');
-
-            const selection = new SelectionArea({
-                selectables: ['.task-row'], // Updated for table rows
-                boundaries: ['.task-list-container'], // Limit to task list container only
-            })
-                .on('start', ({ event }) => {
-                    console.log('[Selection] Start event', event);
-                    // Clear selection if not holding Shift key
-                    if (!(event as any)?.shiftKey) {
-                        setSelectedIds(new Set());
-                        // Clear visual selection
-                        document.querySelectorAll('.task-row.selected, .task-row.temp-selected').forEach(el => {
-                            el.classList.remove('selected', 'temp-selected');
-                        });
-                    }
-                })
-                .on('move', ({ store: { changed: { added, removed } } }) => {
-                    // PERFORMANCE OPTIMIZATION: Don't update state during drag!
-                    // Only manipulate DOM classes for visual feedback
-
-                    // Add temporary selection highlight
-                    for (const el of added) {
-                        el.classList.add('temp-selected');
-                    }
-
-                    // Remove temporary selection highlight
-                    for (const el of removed) {
-                        el.classList.remove('temp-selected');
-                    }
-                })
-                .on('stop', ({ store }) => {
-                    console.log('[Selection] Stop - Selected:', store.stored.length);
-
-                    // Record when drag finished
-                    lastDragTimeRef.current = Date.now();
-
-                    // NOW update state with final selection (only once!)
-                    const finalIds = new Set<string>();
-                    store.stored.forEach(el => {
-                        const taskId = el.getAttribute('data-task-id'); // Updated for table rows
-                        if (taskId) {
-                            finalIds.add(taskId);
-                            // Replace temp class with permanent selected class
-                            el.classList.remove('temp-selected');
-                            el.classList.add('selected');
-                        }
-                    });
-
-                    setSelectedIds(finalIds);
-                    console.log('[Selection] Final selection:', finalIds.size);
-                })
-                // Add beforestart event to handle clicks/taps and clear selection when clicking outside
-                .on('beforestart', (evt) => {
-                    const target = (evt as any).oe?.target as HTMLElement;
-                    if (!target) return true; // Allow selection to proceed
-
-                    console.log('[Selection] Beforestart - checking target:', target.className);
-
-                    // Check if clicked on interactive elements - PREVENT selection if so
-                    if (target.closest('input') ||
-                        target.closest('button') ||
-                        target.closest('a') ||
-                        target.closest('.mantine-TextInput-root') ||
-                        target.closest('.mantine-DateTimePicker-root') ||
-                        target.closest('.mantine-Menu-dropdown') ||
-                        target.closest('.mantine-ActionIcon-root')) {
-                        return false;
-                    }
-
-                    // Check if clicked on task row or bulk action bar
-                    const isTaskRow = target.closest('.task-row');
-                    const isBulkActionBar = target.closest('.bulk-action-bar');
-                    const isCheckbox = target.closest('.mantine-Checkbox-root');
-
-                    // If NOT clicking on task-related elements, clear selection
-                    if (!isTaskRow && !isBulkActionBar && !isCheckbox) {
-                        console.log('[Selection] ✅ Tap outside - clearing selection');
-                        setSelectedIds(new Set());
-                        selection.clearSelection();
-                        document.querySelectorAll('.task-row.selected, .task-row.temp-selected').forEach(el => {
-                            el.classList.remove('selected', 'temp-selected');
-                        });
-                        return false; // Prevent selection from starting
-                    }
-
-                    return true; // Allow selection to proceed
-                });
-
-            selectionRef.current = selection;
-
-            return () => {
-                console.log('[Selection] Destroying Selection.js');
-                selection.destroy();
-            };
-        }, 100); // Small delay to ensure DOM is ready
-
-        return () => clearTimeout(timer);
-    }, [displayTasks]); // Re-initialize when tasks change
-
-    // Window-level mousedown handler with capturing phase to intercept clicks early
-    useEffect(() => {
-        const handleMouseDown = (e: MouseEvent) => {
-            const target = e.target as HTMLElement;
-
-            // Only check for task-related elements
-            const isTaskCard = target.closest('.task-card');
-            const isBulkActionBar = target.closest('.bulk-action-bar');
-            const isCheckbox = target.closest('.mantine-Checkbox-root');
-
-            console.log('[MouseDown Capture]', {
-                className: target.className,
-                tagName: target.tagName,
-                isTaskCard: !!isTaskCard,
-                isBulkActionBar: !!isBulkActionBar,
-                isCheckbox: !!isCheckbox,
-                selectedCount: selectedIds.size,
-            });
-
-            // Don't clear if clicked on task card, bulk action bar, or checkbox
-            if (isTaskCard || isBulkActionBar || isCheckbox) {
-                console.log('[MouseDown] Ignoring - clicked on task element');
-                return;
-            }
-
-            // Don't clear if this click is within 200ms of a drag operation
-            const timeSinceDrag = Date.now() - lastDragTimeRef.current;
-            if (timeSinceDrag < 200) {
-                console.log('[MouseDown] Ignoring - drag just completed');
-                return;
-            }
-
-            // Check if there are any visually selected tasks in the DOM
-            const hasSelectedTasks = document.querySelectorAll('.task-card.selected, .task-card.temp-selected').length > 0;
-
-            // Clear selection if there are selected tasks (check DOM, not just state)
-            if (selectedIds.size > 0 || hasSelectedTasks) {
-                console.log('[Selection] ✅ Clearing selection via mousedown capture', {
-                    stateCount: selectedIds.size,
-                    domCount: hasSelectedTasks,
-                });
-                setSelectedIds(new Set());
-
-                // Clear Selection.js internal cache
-                if (selectionRef.current) {
-                    selectionRef.current.clearSelection();
-                }
-
-                // Clear both selected and temp-selected classes
-                document.querySelectorAll('.task-card.selected, .task-card.temp-selected').forEach(el => {
-                    el.classList.remove('selected', 'temp-selected');
-                });
-            } else {
-                console.log('[MouseDown] No selection to clear');
-            }
-        };
-
-        // Use capturing phase to intercept events early
-        window.addEventListener('mousedown', handleMouseDown, true);
-        return () => window.removeEventListener('mousedown', handleMouseDown, true);
-    }, [selectedIds]);
 
     if (loading && tasks.length === 0) {
         return (
@@ -441,7 +263,6 @@ export function TaskList({ onTaskClick }: TaskListProps) {
         <>
             <Stack
                 gap="md"
-                ref={containerRef}
                 className="task-list-container"
                 style={{ minHeight: '100%', flexGrow: 1 }}
             >
