@@ -128,8 +128,8 @@ function App() {
                   <Tabs.Tab value="calendar" leftSection={<Calendar size={16} />}>
                     カレンダー
                   </Tabs.Tab>
-                  <Tabs.Tab value="planning" leftSection={<Network size={16} />}>
-                    Planning
+                  <Tabs.Tab value="flow" leftSection={<Network size={16} />}>
+                    フロー
                   </Tabs.Tab>
                 </Tabs.List>
 
@@ -145,7 +145,7 @@ function App() {
                   <SchedulingTab />
                 </Tabs.Panel>
 
-                <Tabs.Panel value="planning" pt="md">
+                <Tabs.Panel value="flow" pt="md">
                   <PlanningTab />
                 </Tabs.Panel>
               </Tabs>

@@ -1,99 +1,146 @@
 import { memo } from 'react';
 import { Handle, Position, type NodeProps } from 'reactflow';
-import { Paper, Text, Badge, Stack, useMantineColorScheme } from '@mantine/core';
+import { Paper, Text, Badge, Group, Stack, useMantineColorScheme, ThemeIcon } from '@mantine/core';
+import { Calendar, AlertCircle } from 'lucide-react';
+import dayjs from 'dayjs';
 
 interface TaskNodeData {
     title: string;
     status?: string | null;
     importance?: number | null;
+    deadline?: string | null;
+    estimate_minutes?: number | null;
 }
 
 export const TaskNode = memo(({ data, selected }: NodeProps<TaskNodeData>) => {
     const { colorScheme } = useMantineColorScheme();
     const isDark = colorScheme === 'dark';
 
-    const getStatusColor = (status: string | null | undefined): string => {
-        switch (status) {
-            case 'done':
-            case 'completed':
-                return 'gray';
-            case 'in_progress':
-                return 'blue';
-            default:
-                return 'cyan';
-        }
+    // Status config
+    const getStatusConfig = (status: string | null | undefined) => {
+        const s = status?.toUpperCase();
+        if (s === 'DONE') return { color: 'green', label: 'Done' };
+        if (s === 'DOING' || s === 'IN_PROGRESS') return { color: 'blue', label: 'In Progress' };
+        if (s === 'PENDING') return { color: 'orange', label: 'Pending' };
+        return { color: 'gray', label: 'To Do' };
     };
 
-    const getImportanceSize = (importance: number | null | undefined): string => {
-        if (!importance) return 'sm';
-        return importance >= 4 ? 'md' : 'sm';
+    const statusConfig = getStatusConfig(data.status);
+    const borderColor = statusConfig.color;
+
+    // Deadline processing
+    const deadline = data.deadline ? dayjs(data.deadline) : null;
+    const isOverdue = deadline ? deadline.isBefore(dayjs(), 'day') : false;
+    const deadlineText = deadline ? deadline.format('M/D') : null;
+
+    // Estimate formatting helper
+    const getEstimateText = (minutes: number | null | undefined) => {
+        if (!minutes) return null;
+        if (minutes < 60) return { val: minutes, unit: 'm' };
+        return { val: Math.round(minutes / 60 * 10) / 10, unit: 'h' };
     };
+    const estimate = getEstimateText(data.estimate_minutes);
 
-    const importance = data.importance || 0;
-    const isHighImportance = importance >= 4;
-
-    // Theme-aware colors
-    const bgColor = isDark ? '#fff' : '#2c2e33';
-    const textColor = isDark ? '#000' : '#fff';
-
-    // Border color: blue if selected, otherwise based on importance
-    const borderColor = selected
-        ? '#5c7cfa'
-        : isHighImportance
-            ? '#228be6'
-            : isDark ? '#dee2e6' : '#495057';
-
-    // Border width: thicker if selected
-    const borderWidth = selected ? '3px' : '2px';
-
-    // Box shadow: add glow effect when selected
-    const boxShadow = selected
-        ? '0 0 0 3px rgba(92, 124, 250, 0.3)'
-        : undefined;
+    // Theme-aware styles
+    // Use dark[5] for even better visibility against dark background
+    const bgColor = isDark ? 'var(--mantine-color-dark-5)' : '#fff';
+    const textColor = isDark ? '#fff' : '#000';
 
     return (
         <Paper
             shadow="sm"
             p="xs"
-            withBorder
+            radius="md"
             style={{
-                minWidth: 150,
-                maxWidth: 200,
-                border: `${borderWidth} solid ${borderColor}`,
+                minWidth: 220,
+                maxWidth: 260, // Slightly wider to accommodate right-side time
                 backgroundColor: bgColor,
                 color: textColor,
+                // Use outline for selection to avoid conflicting with the status border
+                border: '1px solid transparent',
+                borderLeft: `6px solid var(--mantine-color-${borderColor}-filled)`, // Status strip
+                outline: selected ? '2px solid var(--mantine-color-blue-filled)' : 'none',
                 cursor: 'pointer',
-                boxShadow,
                 transition: 'all 0.2s ease',
+                position: 'relative',
             }}
         >
-            <Handle type="target" position={Position.Left} />
+            {/* Input Handle */}
+            <Handle
+                type="target"
+                position={Position.Left}
+                style={{ background: isDark ? '#fff' : '#555', width: 8, height: 8 }}
+            />
 
-            <Stack gap={4}>
-                <Text
-                    size={getImportanceSize(importance)}
-                    fw={isHighImportance ? 700 : 500}
-                    lineClamp={2}
-                    c={textColor}
-                >
-                    {data.title}
-                </Text>
+            <Group justify="space-between" align="center" gap="xs" wrap="nowrap">
+                {/* Left Area: Title & Meta */}
+                <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
+                    <Text
+                        size="sm"
+                        fw={700}
+                        lineClamp={2}
+                        lh={1.3}
+                        title={data.title}
+                    >
+                        {data.title}
+                    </Text>
 
-                {data.status && (
-                    <Badge size="xs" color={getStatusColor(data.status)}>
-                        {data.status}
-                    </Badge>
+                    <Group gap={6} align="center">
+                        {/* Status Badge */}
+                        <Badge
+                            size="xs"
+                            variant="light"
+                            color={statusConfig.color}
+                            radius="sm"
+                            styles={{ root: { textTransform: 'none', paddingLeft: 6, paddingRight: 6 } }}
+                        >
+                            {statusConfig.label}
+                        </Badge>
+
+                        {/* Deadline (icon + text) */}
+                        {deadlineText && (
+                            <Group gap={2} align="center">
+                                {isOverdue && <AlertCircle size={10} color="var(--mantine-color-red-6)" />}
+                                <ThemeIcon variant="transparent" size="xs" color={isOverdue ? 'red' : 'dimmed'}>
+                                    <Calendar size={12} />
+                                </ThemeIcon>
+                                <Text
+                                    size="xs"
+                                    c={isOverdue ? 'red' : 'dimmed'}
+                                    fw={isOverdue ? 700 : 500}
+                                >
+                                    {deadlineText}
+                                </Text>
+                            </Group>
+                        )}
+                    </Group>
+                </Stack>
+
+                {/* Right Area: Estimated Time */}
+                {estimate && (
+                    <Stack align="center" gap={0} ml="xs" style={{ minWidth: '40px' }}>
+                        <Text
+                            size="xl"
+                            fw={700}
+                            c={isDark ? 'white' : 'dark'}
+                            style={{ lineHeight: 1 }}
+                        >
+                            {estimate.val}
+                            <Text span size="xs" fw={500} ml={1} style={{ opacity: 0.9 }}>
+                                {estimate.unit}
+                            </Text>
+                        </Text>
+                    </Stack>
                 )}
+            </Group>
 
-                {importance > 0 && (
-                    <Badge size="xs" color="orange" variant="light">
-                        重要度: {importance}
-                    </Badge>
-                )}
-            </Stack>
-
-            <Handle type="source" position={Position.Right} />
-        </Paper >
+            {/* Output Handle */}
+            <Handle
+                type="source"
+                position={Position.Right}
+                style={{ background: isDark ? '#fff' : '#555', width: 8, height: 8 }}
+            />
+        </Paper>
     );
 });
 
