@@ -277,3 +277,7 @@ export const Constants = {
     Enums: {},
   },
 } as const
+
+// Task status type for kanban board
+export type TaskStatus = 'todo' | 'in_progress' | 'pending' | 'done';
+

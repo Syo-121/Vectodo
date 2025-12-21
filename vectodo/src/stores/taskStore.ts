@@ -543,7 +543,26 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
 
     updateTaskStatus: async (taskId: string, status: string | null) => {
         console.log('[TaskStore] Updating task status:', { taskId, status });
+
+        // Store original state for rollback
+        const originalTasks = get().tasks;
+        const originalTask = originalTasks.find(t => t.id === taskId);
+
+        if (!originalTask) {
+            console.error('[TaskStore] Task not found:', taskId);
+            return;
+        }
+
         try {
+            // Optimistic update - update UI immediately
+            set((state) => ({
+                tasks: state.tasks.map(task =>
+                    task.id === taskId ? { ...task, status } : task
+                ),
+            }));
+            console.log('[TaskStore] Optimistic update applied');
+
+            // Update database
             const { error } = await supabase
                 .from('tasks')
                 .update({ status })
@@ -551,24 +570,18 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
 
             if (error) {
                 console.error('[TaskStore] Failed to update status in DB:', error);
+                // Rollback optimistic update
+                set({ tasks: originalTasks });
                 throw error;
             }
 
             console.log('[TaskStore] Status updated in DB successfully');
 
-            // Update local state
-            set((state) => ({
-                tasks: state.tasks.map(task =>
-                    task.id === taskId ? { ...task, status } : task
-                ),
-            }));
-
-            console.log('[TaskStore] Local state updated');
-
-            // Refresh tasks to ensure consistency
-            await get().fetchTasks();
+            // Show success notification
+            useToastStore.getState().addToast('ステータスを更新しました', 'success');
         } catch (error) {
             console.error('[TaskStore] Failed to update task status:', error);
+            useToastStore.getState().addToast('ステータスの更新に失敗しました', 'error');
         }
     },
 
