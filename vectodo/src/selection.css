@@ -13,7 +13,15 @@
     position: relative;
 }
 
+/* Permanent selection (after drag completes) */
 .task-card.selected {
+    background-color: rgba(46, 115, 252, 0.15) !important;
+    transform: scale(0.98);
+    box-shadow: 0 0 0 2px rgba(46, 115, 252, 0.5);
+}
+
+/* Temporary selection (during drag - performance optimized) */
+.task-card.temp-selected {
     background-color: rgba(46, 115, 252, 0.15) !important;
     transform: scale(0.98);
     box-shadow: 0 0 0 2px rgba(46, 115, 252, 0.5);
