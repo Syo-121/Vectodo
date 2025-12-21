@@ -21,7 +21,7 @@ export const TaskNode = memo(({ data, selected }: NodeProps<TaskNodeData>) => {
         if (s === 'DONE') return { color: 'green', label: 'Done' }; // or teal
         if (s === 'DOING' || s === 'IN_PROGRESS') return { color: 'blue', label: 'In Progress' };
         if (s === 'PENDING') return { color: 'orange', label: 'Pending' };
-        return { color: isDark ? 'dark.4' : 'gray.5', label: 'To Do' };
+        return { color: 'gray', label: 'To Do' };
     };
 
     const statusConfig = getStatusConfig(data.status);
@@ -33,7 +33,8 @@ export const TaskNode = memo(({ data, selected }: NodeProps<TaskNodeData>) => {
     const deadlineText = deadline ? deadline.format('M/D') : null;
 
     // Theme-aware styles
-    const bgColor = isDark ? '#25262b' : '#fff'; // surface color
+    // Use dark[5] for even better visibility against dark background
+    const bgColor = isDark ? 'var(--mantine-color-dark-5)' : '#fff'; // surface color
     const textColor = isDark ? '#fff' : '#000';
 
     return (
@@ -46,8 +47,10 @@ export const TaskNode = memo(({ data, selected }: NodeProps<TaskNodeData>) => {
                 maxWidth: 220,
                 backgroundColor: bgColor,
                 color: textColor,
-                border: selected ? '2px solid var(--mantine-color-blue-filled)' : '1px solid transparent',
+                // Use outline for selection to avoid conflicting with the status border
+                border: '1px solid transparent', // Keep base border consistent
                 borderLeft: `6px solid var(--mantine-color-${borderColor}-filled)`, // Status strip
+                outline: selected ? '2px solid var(--mantine-color-blue-filled)' : 'none',
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
                 position: 'relative',
