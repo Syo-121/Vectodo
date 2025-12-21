@@ -58,6 +58,9 @@ export function TaskList({ onTaskClick }: TaskListProps) {
     };
 
     const handleBulkDelete = async () => {
+        if (!confirm(`${selectedIds.size}件のタスクを削除しますか？`)) {
+            return;
+        }
         await deleteTasks(Array.from(selectedIds));
         setSelectedIds(new Set());
     };
@@ -80,6 +83,30 @@ export function TaskList({ onTaskClick }: TaskListProps) {
     // Handle row click for drill-down
     const handleRowClick = (task: Task) => {
         setCurrentProject(task.id);
+    };
+
+    // Handle selection checkbox toggle (separate from status)
+    const handleToggleSelection = (taskId: string) => {
+        setSelectedIds(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(taskId)) {
+                newSet.delete(taskId);
+            } else {
+                newSet.add(taskId);
+            }
+            return newSet;
+        });
+    };
+
+    // Handle select all / deselect all
+    const handleToggleSelectAll = () => {
+        if (selectedIds.size === displayTasks.length && displayTasks.length > 0) {
+            // All selected, so deselect all
+            setSelectedIds(new Set());
+        } else {
+            // Select all visible tasks
+            setSelectedIds(new Set(displayTasks.map(t => t.id)));
+        }
     };
 
     const handleCancelSelection = () => {
@@ -309,6 +336,15 @@ export function TaskList({ onTaskClick }: TaskListProps) {
                     <Table highlightOnHover verticalSpacing="sm" withTableBorder>
                         <Table.Thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--mantine-color-body)' }}>
                             <Table.Tr>
+                                <Table.Th style={{ width: '50px' }}>
+                                    {/* Select All Checkbox */}
+                                    <Checkbox
+                                        checked={selectedIds.size === displayTasks.length && displayTasks.length > 0}
+                                        indeterminate={selectedIds.size > 0 && selectedIds.size < displayTasks.length}
+                                        onChange={handleToggleSelectAll}
+                                        size="sm"
+                                    />
+                                </Table.Th>
                                 <Table.Th style={{ width: '60px' }}>状態</Table.Th>
                                 <Table.Th>タイトル</Table.Th>
                                 <Table.Th style={{ width: '100px' }}>優先度</Table.Th>
@@ -320,6 +356,7 @@ export function TaskList({ onTaskClick }: TaskListProps) {
                             {displayTasks.map((task) => {
                                 const isOverdue = task.deadline && new Date(task.deadline) < new Date();
                                 const isSelected = selectedIds.has(task.id);
+                                const isDone = task.status === 'DONE';
 
                                 return (
                                     <Table.Tr
@@ -332,12 +369,24 @@ export function TaskList({ onTaskClick }: TaskListProps) {
                                             opacity: isSelected ? 0.9 : 1,
                                         }}
                                     >
-                                        {/* Status Checkbox */}
+                                        {/* Selection Checkbox (Square, Blue) */}
                                         <Table.Td onClick={(e) => e.stopPropagation()}>
                                             <Checkbox
-                                                checked={task.status === 'DONE'}
+                                                checked={isSelected}
+                                                onChange={() => handleToggleSelection(task.id)}
+                                                size="sm"
+                                                radius="sm"
+                                            />
+                                        </Table.Td>
+
+                                        {/* Status Checkbox (Circular, Green) */}
+                                        <Table.Td onClick={(e) => e.stopPropagation()}>
+                                            <Checkbox
+                                                checked={isDone}
                                                 onChange={() => handleStatusToggle(task.id)}
                                                 size="sm"
+                                                radius="xl"
+                                                color={isDone ? 'green' : 'gray'}
                                             />
                                         </Table.Td>
 

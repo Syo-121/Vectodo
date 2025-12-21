@@ -1,4 +1,4 @@
-import { Paper, Group, Text, Button, ActionIcon } from '@mantine/core';
+import { Paper, Group, Text, Button, ActionIcon, Affix, Divider } from '@mantine/core';
 import { Trash, CheckCircle, X } from 'lucide-react';
 
 interface BulkActionBarProps {
@@ -12,43 +12,41 @@ export function BulkActionBar({ selectedIds, onComplete, onDelete, onCancel }: B
     if (selectedIds.size === 0) return null;
 
     return (
-        <Paper
-            className="bulk-action-bar"
-            shadow="xl"
-            p="md"
-            radius="md"
-            withBorder
-            style={{
-                position: 'fixed',
-                bottom: '2rem',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                zIndex: 1000,
-                minWidth: '400px',
-                animation: 'slideUp 0.3s ease-out',
-            }}
-        >
-            <style>
-                {`
-                    @keyframes slideUp {
-                        from {
-                            opacity: 0;
-                            transform: translateX(-50%) translateY(20px);
+        <Affix position={{ bottom: 32, left: '50%' }} style={{ transform: 'translateX(-50%)' }}>
+            <Paper
+                className="bulk-action-bar"
+                shadow="md"
+                p="md"
+                radius="xl"
+                withBorder
+                style={{
+                    animation: 'slideUp 0.3s ease-out',
+                }}
+            >
+                <style>
+                    {`
+                        @keyframes slideUp {
+                            from {
+                                opacity: 0;
+                                transform: translateY(20px);
+                            }
+                            to {
+                                opacity: 1;
+                                transform: translateY(0);
+                            }
                         }
-                        to {
-                            opacity: 1;
-                            transform: translateX(-50%) translateY(0);
-                        }
-                    }
-                `}
-            </style>
+                    `}
+                </style>
 
-            <Group justify="space-between">
-                <Text size="sm" fw={500}>
-                    {selectedIds.size}件を選択中
-                </Text>
+                <Group gap="md" wrap="nowrap">
+                    {/* Selection Count */}
+                    <Text size="sm" fw={500}>
+                        {selectedIds.size}件選択中
+                    </Text>
 
-                <Group gap="xs">
+                    <Divider orientation="vertical" />
+
+                    {/* Complete Button */}
                     <Button
                         leftSection={<CheckCircle size={16} />}
                         size="sm"
@@ -59,6 +57,7 @@ export function BulkActionBar({ selectedIds, onComplete, onDelete, onCancel }: B
                         完了にする
                     </Button>
 
+                    {/* Delete Button */}
                     <Button
                         leftSection={<Trash size={16} />}
                         size="sm"
@@ -66,9 +65,12 @@ export function BulkActionBar({ selectedIds, onComplete, onDelete, onCancel }: B
                         color="red"
                         onClick={onDelete}
                     >
-                        削除
+                        削除する
                     </Button>
 
+                    <Divider orientation="vertical" />
+
+                    {/* Close Button */}
                     <ActionIcon
                         variant="subtle"
                         color="gray"
@@ -78,7 +80,7 @@ export function BulkActionBar({ selectedIds, onComplete, onDelete, onCancel }: B
                         <X size={18} />
                     </ActionIcon>
                 </Group>
-            </Group>
-        </Paper>
+            </Paper>
+        </Affix>
     );
 }
