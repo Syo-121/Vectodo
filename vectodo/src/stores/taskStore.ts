@@ -33,6 +33,7 @@ interface TaskStore {
     showCompletedTasks: boolean;
     currentProjectId: string | null;
     targetCalendarId: string;
+    doneFilterDays: number | null;
     fetchTasks: () => Promise<void>;
     fetchDependencies: () => Promise<void>;
     addTask: (taskData: TaskData) => Promise<void>;
@@ -45,6 +46,7 @@ interface TaskStore {
     toggleShowCompletedTasks: () => void;
     setCurrentProject: (id: string | null) => void;
     setTargetCalendarId: (id: string) => void;
+    setDoneFilterDays: (days: number | null) => void;
     addDependency: (predecessorId: string, successorId: string) => Promise<void>;
     removeDependency: (predecessorId: string, successorId: string) => Promise<void>;
     deleteTasks: (ids: string[]) => Promise<void>;
@@ -149,6 +151,32 @@ const saveTargetCalendarId = (id: string) => {
 
 const initialTargetCalendar = loadTargetCalendarId();
 
+// Load done filter days from localStorage
+const loadDoneFilterDays = (): number | null => {
+    try {
+        const saved = localStorage.getItem('vectodo-done-filter-days');
+        return saved ? JSON.parse(saved) : null;
+    } catch (error) {
+        console.error('Failed to load done filter days:', error);
+        return null;
+    }
+};
+
+// Save done filter days to localStorage
+const saveDoneFilterDays = (days: number | null) => {
+    try {
+        if (days !== null) {
+            localStorage.setItem('vectodo-done-filter-days', JSON.stringify(days));
+        } else {
+            localStorage.removeItem('vectodo-done-filter-days');
+        }
+    } catch (error) {
+        console.error('Failed to save done filter days:', error);
+    }
+};
+
+const initialDoneFilterDays = loadDoneFilterDays();
+
 export const useTaskStore = create<TaskStore>((set, get) => ({
     tasks: [],
     dependencies: [],
@@ -159,6 +187,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     showCompletedTasks: initialShowCompleted,
     currentProjectId: initialCurrentProject,
     targetCalendarId: initialTargetCalendar,
+    doneFilterDays: initialDoneFilterDays,
 
     fetchTasks: async () => {
         set({ loading: true, error: null });
@@ -553,19 +582,23 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
             return;
         }
 
+        // Determine completed_at value based on status
+        const completed_at = status === 'DONE' ? new Date().toISOString() : null;
+        console.log('[TaskStore] Setting completed_at:', completed_at);
+
         try {
             // Optimistic update - update UI immediately
             set((state) => ({
                 tasks: state.tasks.map(task =>
-                    task.id === taskId ? { ...task, status } : task
+                    task.id === taskId ? { ...task, status, completed_at } : task
                 ),
             }));
             console.log('[TaskStore] Optimistic update applied');
 
-            // Update database
+            // Update database with both status and completed_at
             const { error } = await supabase
                 .from('tasks')
-                .update({ status })
+                .update({ status, completed_at })
                 .eq('id', taskId);
 
             if (error) {
@@ -659,6 +692,11 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     setTargetCalendarId: (id: string) => {
         set({ targetCalendarId: id });
         saveTargetCalendarId(id);
+    },
+
+    setDoneFilterDays: (days: number | null) => {
+        set({ doneFilterDays: days });
+        saveDoneFilterDays(days);
     },
 
     // Bulk delete tasks

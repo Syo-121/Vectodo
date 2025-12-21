@@ -1,8 +1,8 @@
 import { useEffect, useMemo } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type { DropResult } from '@hello-pangea/dnd';
-import { Paper, Stack, Text, Badge, Group, Box, ScrollArea, Loader, Center, useMantineColorScheme, useMantineTheme } from '@mantine/core';
-import { Circle, Play, Pause, CheckCircle } from 'lucide-react';
+import { Paper, Stack, Text, Badge, Group, Box, ScrollArea, Loader, Center, useMantineColorScheme, useMantineTheme, Menu, ActionIcon } from '@mantine/core';
+import { Circle, Play, Pause, CheckCircle, Settings } from 'lucide-react';
 import { useTaskStore } from '../../stores/taskStore';
 import { KanbanCard } from './KanbanCard';
 import type { Tables, TaskStatus } from '../../supabase-types';
@@ -49,7 +49,7 @@ const columns: Column[] = [
 ];
 
 export function KanbanBoard({ onTaskClick }: KanbanBoardProps) {
-    const { tasks, loading, fetchTasks, updateTaskStatus, currentProjectId, showCompletedTasks } = useTaskStore();
+    const { tasks, loading, fetchTasks, updateTaskStatus, currentProjectId, showCompletedTasks, doneFilterDays, setDoneFilterDays } = useTaskStore();
     const { colorScheme } = useMantineColorScheme();
     const theme = useMantineTheme();
     const isDark = colorScheme === 'dark';
@@ -102,6 +102,21 @@ export function KanbanBoard({ onTaskClick }: KanbanBoardProps) {
 
         return grouped;
     }, [displayTasks]);
+
+    // Filter done tasks based on doneFilterDays setting
+    const filterDoneTasks = (tasks: Task[]) => {
+        if (doneFilterDays === null) return tasks;
+
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - doneFilterDays);
+
+        return tasks.filter(task => {
+            // Show tasks without completed_at (legacy data)
+            if (!task.completed_at) return true;
+            // Show tasks completed after cutoff date
+            return new Date(task.completed_at) > cutoffDate;
+        });
+    };
 
     const handleDragEnd = async (result: DropResult) => {
         const { destination, source, draggableId } = result;
@@ -163,6 +178,10 @@ export function KanbanBoard({ onTaskClick }: KanbanBoardProps) {
 
                     {columns.map(column => {
                         const columnTasks = tasksByStatus[column.id];
+                        // Apply filter only to Done column
+                        const displayColumnTasks = column.id === 'done'
+                            ? filterDoneTasks(columnTasks)
+                            : columnTasks;
 
                         const getColumnBgColor = () => {
                             if (isDark) {
@@ -233,9 +252,52 @@ export function KanbanBoard({ onTaskClick }: KanbanBoardProps) {
                                                 {column.title}
                                             </Text>
                                         </Group>
-                                        <Badge color={column.color} variant="light" size="sm">
-                                            {columnTasks.length}
-                                        </Badge>
+                                        <Group gap="xs">
+                                            <Badge color={column.color} variant="light" size="sm">
+                                                {displayColumnTasks.length}
+                                            </Badge>
+                                            {/* Settings menu for Done column */}
+                                            {column.id === 'done' && (
+                                                <Menu shadow="md" width={200}>
+                                                    <Menu.Target>
+                                                        <ActionIcon
+                                                            size="sm"
+                                                            variant="subtle"
+                                                            c={isDark ? theme.colors.gray[5] : theme.colors.gray[6]}
+                                                        >
+                                                            <Settings size={16} />
+                                                        </ActionIcon>
+                                                    </Menu.Target>
+                                                    <Menu.Dropdown>
+                                                        <Menu.Label>完了タスクの表示</Menu.Label>
+                                                        <Menu.Item
+                                                            onClick={() => setDoneFilterDays(null)}
+                                                            c={doneFilterDays === null ? 'blue' : undefined}
+                                                        >
+                                                            全て表示
+                                                        </Menu.Item>
+                                                        <Menu.Item
+                                                            onClick={() => setDoneFilterDays(1)}
+                                                            c={doneFilterDays === 1 ? 'blue' : undefined}
+                                                        >
+                                                            1日以内
+                                                        </Menu.Item>
+                                                        <Menu.Item
+                                                            onClick={() => setDoneFilterDays(3)}
+                                                            c={doneFilterDays === 3 ? 'blue' : undefined}
+                                                        >
+                                                            3日以内
+                                                        </Menu.Item>
+                                                        <Menu.Item
+                                                            onClick={() => setDoneFilterDays(7)}
+                                                            c={doneFilterDays === 7 ? 'blue' : undefined}
+                                                        >
+                                                            1週間以内
+                                                        </Menu.Item>
+                                                    </Menu.Dropdown>
+                                                </Menu>
+                                            )}
+                                        </Group>
                                     </Group>
 
                                     {/* Droppable Area */}
@@ -254,7 +316,7 @@ export function KanbanBoard({ onTaskClick }: KanbanBoardProps) {
                                                     transition: 'background-color 0.2s',
                                                 }}
                                             >
-                                                {columnTasks.map((task, index) => (
+                                                {displayColumnTasks.map((task, index) => (
                                                     <Draggable
                                                         key={task.id}
                                                         draggableId={task.id}

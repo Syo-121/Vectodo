@@ -1,5 +1,5 @@
 import { Card, Text, Badge, Stack, Group, useMantineColorScheme, useMantineTheme } from '@mantine/core';
-import { Clock, AlertCircle } from 'lucide-react';
+import { Clock, AlertCircle, CheckCircle } from 'lucide-react';
 import type { Tables } from '../../supabase-types';
 
 type Task = Tables<'tasks'>;
@@ -15,6 +15,7 @@ export function KanbanCard({ task, onTaskClick }: KanbanCardProps) {
     const { colorScheme } = useMantineColorScheme();
     const theme = useMantineTheme();
     const isDark = colorScheme === 'dark';
+    const isDone = task.status?.toUpperCase() === 'DONE';
 
     return (
         <Card
@@ -98,10 +99,19 @@ export function KanbanCard({ task, onTaskClick }: KanbanCardProps) {
                     )}
                 </Group>
 
-                {/* Slug badge */}
-                <Text size="xs" c="dimmed">
-                    #{task.slug}
-                </Text>
+                {/* Completed date for done tasks */}
+                {isDone && task.completed_at && (
+                    <Group gap={4}>
+                        <CheckCircle size={12} color={theme.colors.green[6]} />
+                        <Text size="xs" c="dimmed">
+                            完了: {new Date(task.completed_at).toLocaleDateString('ja-JP', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                            })}
+                        </Text>
+                    </Group>
+                )}
             </Stack>
         </Card>
     );
