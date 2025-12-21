@@ -42,8 +42,8 @@ export const TaskNode = memo(({ data, selected }: NodeProps<TaskNodeData>) => {
     const estimate = getEstimateText(data.estimate_minutes);
 
     // Theme-aware styles
-    // Use dark[6] as requested for visibility
-    const bgColor = isDark ? 'var(--mantine-color-dark-6)' : '#fff';
+    // Use dark[5] for even better visibility against dark background
+    const bgColor = isDark ? 'var(--mantine-color-dark-5)' : '#fff';
     const textColor = isDark ? '#fff' : '#000';
 
     return (
@@ -126,7 +126,7 @@ export const TaskNode = memo(({ data, selected }: NodeProps<TaskNodeData>) => {
                             style={{ lineHeight: 1 }}
                         >
                             {estimate.val}
-                            <Text span size="xs" fw={500} ml={1} c="dimmed">
+                            <Text span size="xs" fw={500} ml={1} style={{ opacity: 0.9 }}>
                                 {estimate.unit}
                             </Text>
                         </Text>
