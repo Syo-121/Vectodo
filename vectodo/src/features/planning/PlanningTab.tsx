@@ -92,6 +92,7 @@ export function PlanningTab() {
                     status: task.status,
                     importance: task.importance,
                     deadline: task.deadline,
+                    estimate_minutes: task.estimate_minutes,
                 },
             };
         });
