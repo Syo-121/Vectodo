@@ -1,5 +1,6 @@
 ﻿import type { Session } from '@supabase/supabase-js';
 import type { Tables } from '../supabase-types';
+import { secureLog } from './secureLogger';
 
 type Task = Tables<'tasks'>;
 
@@ -68,43 +69,33 @@ export async function createGoogleEvent(
     calendarId: string,
     session: Session
 ): Promise<string | null> {
-    console.log('🔄 [Google Sync] createGoogleEvent called for:', task.title);
-    console.log('   Target calendar:', calendarId);
+    secureLog.info('[Google Sync] createGoogleEvent called for:', task.title);
+    secureLog.info('[Google Sync] Target calendar:', calendarId);
 
     // Skip if no date information
     if (!task.planned_start && !task.planned_end && !task.deadline) {
-        console.log('ℹ️ [Google Sync] No date info, skipping sync for:', task.title);
-        console.log('   - planned_start:', task.planned_start);
-        console.log('   - planned_end:', task.planned_end);
-        console.log('   - deadline:', task.deadline);
+        secureLog.info('[Google Sync] No date info, skipping sync for:', task.title);
         return null;
     }
 
     // Validate session and token
     if (!session) {
-        console.warn('⚠️ [Google Sync] No session available');
+        secureLog.warn('[Google Sync] No session available');
         return null;
     }
 
     if (!session.provider_token) {
-        console.warn('⚠️ [Google Sync] Googleトークンがありません。再ログインが必要です。');
-        console.log('   Session details:', {
-            user: session.user?.email,
-            provider: session.user?.app_metadata?.provider,
-            hasToken: !!session.provider_token,
-        });
+        secureLog.warn('[Google Sync] Google token not available. Re-login required.');
+        secureLog.session('[Google Sync] Session user', !!session.user);
         return null;
     }
 
-    console.log('✓ [Google Sync] Session valid, provider_token exists');
+    secureLog.session('[Google Sync] Session valid', true);
 
     try {
         const event = convertTaskToGoogleEvent(task);
 
-        console.log('📤 [Google Sync] Sending event to Google Calendar:');
-        console.log('   Task:', task.title);
-        console.log('   Calendar ID:', calendarId);
-        console.log('   Payload:', JSON.stringify(event, null, 2));
+        secureLog.apiRequest('POST', `calendar/${calendarId}/events`, true);
 
         const response = await fetch(
             `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
@@ -118,37 +109,27 @@ export async function createGoogleEvent(
             }
         );
 
-        console.log('📥 [Google Sync] API Response:', {
-            status: response.status,
-            statusText: response.statusText,
-            ok: response.ok,
-        });
+        secureLog.apiResponse(response.status, response.statusText, response.ok);
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => response.text());
-            console.error('❌ [Google Sync] API Error Response:', errorData);
-            console.error('   Status:', response.status, response.statusText);
+            secureLog.error('[Google Sync] API Error Response:', errorData);
+            secureLog.error(`[Google Sync] Status: ${response.status} ${response.statusText}`);
 
             if (response.status === 403) {
-                console.error('   ⚠️ 403 Forbidden: スコープまたは権限が不足しています');
+                secureLog.error('[Google Sync] 403 Forbidden: Insufficient scope or permissions');
             } else if (response.status === 401) {
-                console.error('   ⚠️ 401 Unauthorized: トークンが無効または期限切れです。再ログインしてください。');
+                secureLog.error('[Google Sync] 401 Unauthorized: Invalid or expired token. Re-login required.');
             }
 
             throw new Error(`Failed to create event: ${response.status}`);
         }
 
         const data = await response.json();
-        console.log('✅ [Google Sync] Event created successfully!');
-        console.log('   Event ID:', data.id);
-        console.log('   Event Link:', data.htmlLink);
+        secureLog.info('[Google Sync] ✅ Event created successfully!', data.id);
         return data.id;
     } catch (err) {
-        console.error('❌ [Google Sync] Error creating event:', err);
-        if (err instanceof Error) {
-            console.error('   Error message:', err.message);
-            console.error('   Error stack:', err.stack);
-        }
+        secureLog.error('[Google Sync] Error creating event:', err);
         return null;
     }
 }
@@ -162,27 +143,24 @@ export async function updateGoogleEvent(
     calendarId: string,
     session: Session
 ): Promise<boolean> {
-    console.log('🔄 [Google Sync] updateGoogleEvent called for:', task.title);
-    console.log('   Event ID:', googleEventId);
-    console.log('   Target calendar:', calendarId);
+    secureLog.info('[Google Sync] updateGoogleEvent called for:', task.title);
+    secureLog.info('[Google Sync] Event ID:', googleEventId);
 
     if (!session.provider_token) {
-        console.warn('⚠️ [Google Sync] No provider token available for update');
+        secureLog.warn('[Google Sync] No provider token available for update');
         return false;
     }
 
     // If dates were removed, delete the event
     if (!task.planned_start && !task.planned_end && !task.deadline) {
-        console.log('ℹ️ [Google Sync] Dates removed, deleting event from calendar');
+        secureLog.info('[Google Sync] Dates removed, deleting event from calendar');
         return await deleteGoogleEvent(googleEventId, calendarId, session);
     }
 
     try {
         const event = convertTaskToGoogleEvent(task);
 
-        console.log('📤 [Google Sync] Updating event in Google Calendar:');
-        console.log('   Calendar ID:', calendarId);
-        console.log('   Payload:', JSON.stringify(event, null, 2));
+        secureLog.apiRequest('PUT', `calendar/${calendarId}/events/${googleEventId}`, true);
 
         const response = await fetch(
             `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${googleEventId}`,
@@ -196,32 +174,25 @@ export async function updateGoogleEvent(
             }
         );
 
-        console.log('📥 [Google Sync] API Response:', {
-            status: response.status,
-            statusText: response.statusText,
-            ok: response.ok,
-        });
+        secureLog.apiResponse(response.status, response.statusText, response.ok);
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => response.text());
-            console.error('❌ [Google Sync] API Error Response:', errorData);
+            secureLog.error('[Google Sync] API Error Response:', errorData);
 
             // If 404, the event was already deleted
             if (response.status === 404) {
-                console.log('ℹ️ [Google Sync] Event not found (404), considering as success');
+                secureLog.info('[Google Sync] Event not found (404), considering as success');
                 return true;
             }
 
             throw new Error(`Failed to update event: ${response.status}`);
         }
 
-        console.log('✅ [Google Sync] Event updated successfully!');
+        secureLog.info('[Google Sync] ✅ Event updated successfully!');
         return true;
     } catch (err) {
-        console.error('❌ [Google Sync] Error updating event:', err);
-        if (err instanceof Error) {
-            console.error('   Error message:', err.message);
-        }
+        secureLog.error('[Google Sync] Error updating event:', err);
         return false;
     }
 }
@@ -234,18 +205,17 @@ export async function deleteGoogleEvent(
     calendarId: string,
     session: Session
 ): Promise<boolean> {
-    console.log('🗑️ [Google Sync] deleteGoogleEvent called');
-    console.log('   Event ID:', googleEventId);
-    console.log('   Target calendar:', calendarId);
+    secureLog.info('[Google Sync] deleteGoogleEvent called');
+    secureLog.info('[Google Sync] Event ID:', googleEventId);
 
     if (!session.provider_token) {
-        console.warn('⚠️ [Google Sync] No provider token available for deletion');
+        secureLog.warn('[Google Sync] No provider token available for deletion');
         return false;
     }
 
     try {
         // SAFETY CHECK: Verify event before deletion
-        console.log('🔍 [Google Sync] Verifying event origin before deletion...');
+        secureLog.info('[Google Sync] 🔍 Verifying event origin before deletion...');
         const getResponse = await fetch(
             `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${googleEventId}`,
             {
