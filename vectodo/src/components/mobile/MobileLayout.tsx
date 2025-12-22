@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabaseClient';
 import { useToastStore } from '../../stores/useToastStore';
 import { MobileHome } from './MobileHome';
 import { MobileFlow } from './MobileFlow';
+import { MobileList } from './MobileList';
 
 export function MobileLayout() {
     const [activeTab, setActiveTab] = useState<string>('home');
@@ -53,12 +54,7 @@ export function MobileLayout() {
                     )}
 
                     {activeTab === 'list' && (
-                        <Stack gap="md">
-                            <Text size="xl" fw={600}>リスト画面</Text>
-                            <Text c="dimmed">
-                                ここにタスク一覧を表示します。
-                            </Text>
-                        </Stack>
+                        <MobileList />
                     )}
 
                     {activeTab === 'settings' && (
