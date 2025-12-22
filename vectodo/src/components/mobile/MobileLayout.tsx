@@ -3,6 +3,7 @@ import { AppShell, Stack, Text, Button, Tabs, ActionIcon, Group, Title } from '@
 import { Home, GitMerge, List, Settings, Plus, CheckSquare, LogOut } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { useToastStore } from '../../stores/useToastStore';
+import { MobileHome } from './MobileHome';
 
 export function MobileLayout() {
     const [activeTab, setActiveTab] = useState<string>('home');
@@ -41,14 +42,9 @@ export function MobileLayout() {
 
             {/* Main Content Area */}
             <AppShell.Main>
-                <Stack p="md" style={{ paddingBottom: '90px' }}>
+                <Stack p={0} style={{ paddingBottom: '90px' }}>
                     {activeTab === 'home' && (
-                        <Stack gap="md">
-                            <Text size="xl" fw={600}>ホーム画面</Text>
-                            <Text c="dimmed">
-                                ここにダッシュボードや今日のタスク一覧などを表示します。
-                            </Text>
-                        </Stack>
+                        <MobileHome />
                     )}
 
                     {activeTab === 'flow' && (
