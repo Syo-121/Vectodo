@@ -387,7 +387,7 @@ export function SchedulingTab() {
 
 // Custom event rendering
 function renderEventContent(eventInfo: EventContentArg) {
-    const { hasWarning, warningMessages, isDone } = eventInfo.event.extendedProps;
+    const { hasWarning, warningMessages } = eventInfo.event.extendedProps;
     const textColor = eventInfo.event.textColor || '#ffffff';
 
     return (
