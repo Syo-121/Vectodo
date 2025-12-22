@@ -41,6 +41,7 @@ function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       console.log('[Auth] Auth state changed:', _event, session ? 'logged in' : 'not logged in');
       setSession(session);
+      setLoading(false); // Clear loading state after auth state change (e.g., OAuth redirect)
     });
 
     return () => subscription.unsubscribe();
