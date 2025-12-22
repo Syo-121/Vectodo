@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Stack, Text, Loader, Alert, Center, Checkbox, Table, ActionIcon, Badge, ScrollArea, Menu, TextInput, Group, Tooltip } from '@mantine/core';
 import { DateTimePicker } from '@mantine/dates';
-import { AlertCircle, Trash2, Circle, Play, Pause, CheckCircle, ArrowUp, ArrowRight, ArrowDown, FolderOpen, Pencil, Flame, Clock } from 'lucide-react';
+import { AlertCircle, Trash2, Circle, Play, Pause, CheckCircle, ArrowUp, ArrowRight, ArrowDown, FolderOpen, Pencil, Flame, Clock, Repeat } from 'lucide-react';
 import { useTaskStore } from '../stores/taskStore';
 import { BulkActionBar } from './BulkActionBar';
 import type { Tables } from '../supabase-types';
@@ -517,6 +517,12 @@ export function TaskList({ onTaskClick }: TaskListProps) {
                                                     autoComplete="off"
                                                     style={{ maxWidth: '360px', flexGrow: 1 }}
                                                 />
+                                                {/* Recurrence indicator */}
+                                                {task.recurrence && (
+                                                    <Tooltip label="繰り返しタスク">
+                                                        <Repeat size={14} color="var(--mantine-color-blue-6)" style={{ flexShrink: 0 }} />
+                                                    </Tooltip>
+                                                )}
                                             </Group>
                                         </Table.Td>
 

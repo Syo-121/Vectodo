@@ -402,7 +402,7 @@ export function TaskFormModal({ opened, onClose, task, onUnschedule }: TaskFormM
                         />
 
                         <Collapse in={showCustomRecurrence}>
-                            <Stack gap="md" p="md" style={{ backgroundColor: 'var(--mantine-color-gray-0)', borderRadius: '8px' }}>
+                            <Stack gap="md" p="md" style={{ backgroundColor: 'var(--mantine-color-dark-6)', borderRadius: '8px' }}>
                                 <Group grow>
                                     <NumberInput
                                         label="間隔"
