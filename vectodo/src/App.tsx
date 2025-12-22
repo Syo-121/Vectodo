@@ -3,6 +3,7 @@ import '@mantine/dates/styles.css';
 import './notifications.css';
 import { useState, useEffect } from 'react';
 import { MantineProvider, AppShell, Stack, Button, Tabs, Loader, Center } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 import { ModalsProvider } from '@mantine/modals';
 import { Notifications } from '@mantine/notifications';
 import { Plus, List, Calendar, Network, Columns } from 'lucide-react';
@@ -14,6 +15,7 @@ import { SchedulingTab } from './features/calendar/SchedulingTab';
 import { PlanningTab } from './features/planning/PlanningTab';
 import { KanbanBoard } from './features/kanban/KanbanBoard';
 import { ToastContainer } from './components/ToastContainer';
+import { MobileLayout } from './components/mobile/MobileLayout';
 import { LoginScreen } from './features/auth/LoginScreen';
 import { supabase } from './lib/supabaseClient';
 import type { Tables } from './supabase-types';
@@ -78,6 +80,9 @@ function App() {
     setEditingTask(null);
   };
 
+  // Mobile detection
+  const isMobile = useMediaQuery('(max-width: 48em)');
+
   // Show loading screen while checking auth
   if (loading) {
     return (
@@ -104,6 +109,23 @@ function App() {
     );
   }
 
+  // Mobile layout (completely separate from desktop)
+  if (isMobile) {
+    return (
+      <MantineProvider defaultColorScheme="auto">
+        <Notifications
+          position="top-right"
+          zIndex={10000}
+          containerWidth={420}
+          limit={5}
+        />
+        <ToastContainer />
+        <MobileLayout />
+      </MantineProvider>
+    );
+  }
+
+  // Desktop layout (existing PC layout)
   // Show main app if authenticated
   return (
     <MantineProvider defaultColorScheme="auto">
