@@ -4,6 +4,7 @@ import { Home, GitMerge, List, Settings, Plus, CheckSquare, LogOut } from 'lucid
 import { supabase } from '../../lib/supabaseClient';
 import { useToastStore } from '../../stores/useToastStore';
 import { MobileHome } from './MobileHome';
+import { MobileFlow } from './MobileFlow';
 
 export function MobileLayout() {
     const [activeTab, setActiveTab] = useState<string>('home');
@@ -48,12 +49,7 @@ export function MobileLayout() {
                     )}
 
                     {activeTab === 'flow' && (
-                        <Stack gap="md">
-                            <Text size="xl" fw={600}>フロー画面</Text>
-                            <Text c="dimmed">
-                                ここにタスクのフローチャート（PERT図）を表示します。
-                            </Text>
-                        </Stack>
+                        <MobileFlow />
                     )}
 
                     {activeTab === 'list' && (
