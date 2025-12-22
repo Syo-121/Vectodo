@@ -289,6 +289,9 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
                 deadline: data.deadline,
             });
 
+            // Track sync status for consolidated user feedback
+            let syncStatus: 'success' | 'partial' | 'failed' = 'success';
+
             try {
                 const { data: { session } } = await supabase.auth.getSession();
                 console.log('   Session check:', {
@@ -316,12 +319,14 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
                             data.google_event_id = googleEventId;
                             data.google_calendar_id = targetCalendarId;
                             console.log('✅ [Task Store] Google sync successful! Event ID:', googleEventId);
-                            useToastStore.getState().addToast('Googleカレンダーに同期しました', 'success');
+                            syncStatus = 'success';
                         } else {
                             console.error('❌ [Task Store] Failed to save google_event_id:', updateError);
+                            syncStatus = 'partial';
                         }
                     } else {
                         console.log('ℹ️ [Task Store] Google sync returned null (event not created)');
+                        syncStatus = 'failed';
                     }
                 } else {
                     if (!session?.provider_token) {
@@ -329,11 +334,12 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
                     } else {
                         console.log('ℹ️ [Task Store] Google sync skipped: No date information');
                     }
+                    // No sync needed, keep status as 'success'
                 }
             } catch (syncError) {
                 // Sync errors should not block task creation
                 console.error('❌ [Task Store] Google Calendar sync failed:', syncError);
-                useToastStore.getState().addToast('Google同期に失敗しました', 'error');
+                syncStatus = 'failed';
             }
 
             // Add the new task to the beginning of the list
@@ -342,9 +348,17 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
                 loading: false,
             }));
 
-            // Show success toast
-            console.log('[DEBUG] About to show task creation success toast');
-            useToastStore.getState().addToast('タスクを作成しました', 'success');
+            // Show consolidated toast based on sync status
+            console.log('[DEBUG] Showing task creation toast with sync status:', syncStatus);
+            if (syncStatus === 'success' && data.google_event_id) {
+                useToastStore.getState().addToast('タスクを作成し、Googleカレンダーに同期しました', 'success');
+            } else if (syncStatus === 'partial') {
+                useToastStore.getState().addToast('タスクを作成しました（カレンダー同期は部分的に失敗）', 'warning');
+            } else if (syncStatus === 'failed' && (data.planned_start || data.planned_end || data.deadline)) {
+                useToastStore.getState().addToast('タスクを作成しました（カレンダー同期に失敗）', 'warning');
+            } else {
+                useToastStore.getState().addToast('タスクを作成しました', 'success');
+            }
         } catch (error: any) {
             const errorMessage = error?.message || 'Failed to add task';
             const errorDetails = error?.details || '';

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useTaskStore } from '../stores/taskStore';
+import { secureLog } from '../utils/secureLogger';
 
 export interface GoogleCalendar {
     id: string;
@@ -29,9 +30,37 @@ const loadSelectedCalendars = (): string[] => {
         const saved = localStorage.getItem('vectodo-selected-calendars');
         return saved ? JSON.parse(saved) : ['primary'];
     } catch (error) {
-        console.error('[Google Calendar] Failed to load selected calendars:', error);
+        secureLog.error('[Google Calendar] Failed to load selected calendars:', error);
         return ['primary'];
     }
+};
+
+/**
+ * Ensure we have a fresh, valid OAuth token
+ * Automatically refreshes if expiring within 5 minutes
+ */
+const ensureFreshToken = async (): Promise<string | null> => {
+    const { data: { session }, error } = await supabase.auth.getSession();
+
+    if (error || !session) {
+        secureLog.warn('[Google Calendar] No session available');
+        return null;
+    }
+
+    // Check if token is about to expire (within 5 minutes)
+    const expiresAt = session.expires_at;
+    if (expiresAt && Date.now() / 1000 > expiresAt - 300) {
+        secureLog.info('[Google Calendar] Token expiring soon, refreshing...');
+        const { data, error: refreshError } = await supabase.auth.refreshSession();
+        if (refreshError || !data.session) {
+            secureLog.error('[Google Calendar] Failed to refresh token:', refreshError);
+            return null;
+        }
+        secureLog.info('[Google Calendar] ✓ Token refreshed successfully');
+        return data.session.provider_token || null;
+    }
+
+    return session.provider_token || null;
 };
 
 export function useGoogleCalendar(timeMin?: Date, timeMax?: Date) {
@@ -50,23 +79,23 @@ export function useGoogleCalendar(timeMin?: Date, timeMax?: Date) {
         try {
             localStorage.setItem('vectodo-selected-calendars', JSON.stringify(selectedCalendarIds));
         } catch (error) {
-            console.error('[Google Calendar] Failed to save selected calendars:', error);
+            secureLog.error('[Google Calendar] Failed to save selected calendars:', error);
         }
     }, [selectedCalendarIds]);
 
     // Monitor session changes
     useEffect(() => {
-        console.log('[Google Calendar] Setting up session listener...');
+        secureLog.info('[Google Calendar] Setting up session listener...');
 
         // Get initial session
         supabase.auth.getSession().then(({ data: { session } }) => {
-            console.log('[Google Calendar] Initial session:', session ? 'Found' : 'Not found');
+            secureLog.session('[Google Calendar] Initial session', !!session?.provider_token);
             setSession(session);
         });
 
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            console.log('[Google Calendar] Session changed:', session ? 'Logged in' : 'Logged out');
+            secureLog.session('[Google Calendar] Session changed', !!session?.provider_token);
             setSession(session);
         });
 
@@ -75,27 +104,30 @@ export function useGoogleCalendar(timeMin?: Date, timeMax?: Date) {
 
     // Fetch calendar list when session is available
     useEffect(() => {
-        if (!session?.provider_token) {
-            console.log('[Google Calendar] No session/token, skipping calendar list fetch');
-            setCalendars([]);
-            return;
-        }
-
         const fetchCalendarList = async () => {
             try {
-                console.log('[Google Calendar] Fetching calendar list...');
+                // Ensure we have a fresh token
+                const token = await ensureFreshToken();
+                if (!token) {
+                    secureLog.warn('[Google Calendar] No valid token, skipping calendar list fetch');
+                    setCalendars([]);
+                    return;
+                }
+
+                secureLog.info('[Google Calendar] Fetching calendar list...');
 
                 const response = await fetch(
                     'https://www.googleapis.com/calendar/v3/users/me/calendarList',
                     {
                         headers: {
-                            Authorization: `Bearer ${session.provider_token}`,
+                            Authorization: `Bearer ${token}`,
                         },
                     }
                 );
 
                 if (!response.ok) {
-                    console.error('[Google Calendar] Failed to fetch calendar list:', response.status, response.statusText);
+                    secureLog.error('[Google Calendar] Failed to fetch calendar list:',
+                        `${response.status} ${response.statusText}`);
                     return;
                 }
 
@@ -106,57 +138,44 @@ export function useGoogleCalendar(timeMin?: Date, timeMax?: Date) {
                     backgroundColor: item.backgroundColor || '#868e96',
                 })) || [];
 
-                console.log('[Google Calendar] ✓ Fetched calendars:', calendarList);
+                secureLog.info(`[Google Calendar] ✓ Fetched ${calendarList.length} calendars`);
                 setCalendars(calendarList);
             } catch (err) {
-                console.error('[Google Calendar] Error fetching calendar list:', err);
+                secureLog.error('[Google Calendar] Error fetching calendar list:', err);
             }
         };
 
-        fetchCalendarList();
+        if (session?.provider_token) {
+            fetchCalendarList();
+        } else {
+            setCalendars([]);
+        }
     }, [session]);
 
     // Fetch events from selected calendars
     useEffect(() => {
         const fetchGoogleEvents = async () => {
-            console.log('[Google Calendar] Starting fetch process...');
+            secureLog.info('[Google Calendar] Starting fetch process...');
             setLoading(true);
             setError(null);
 
             try {
-                // Get session
-                console.log('[Google Calendar] Getting session...');
-                const { data: { session } } = await supabase.auth.getSession();
-
-                console.log('[Google Calendar] Session:', {
-                    exists: !!session,
-                    hasProvider: !!session?.provider_token,
-                    provider: session?.user?.app_metadata?.provider,
-                });
-
-                if (!session?.provider_token) {
-                    console.warn('[Google Calendar] ⚠️ No provider_token found. Please re-login to Google.');
-                    console.log('[Google Calendar] Session details:', session);
+                // Ensure we have a fresh token
+                const token = await ensureFreshToken();
+                if (!token) {
+                    secureLog.warn('[Google Calendar] ⚠️ No valid token. Please re-login to Google.');
                     setEvents([]);
                     setLoading(false);
                     return;
                 }
 
-                console.log('[Google Calendar] ✓ Provider token found');
-                console.log('[Google Calendar] Selected calendars:', selectedCalendarIds);
+                secureLog.info('[Google Calendar] ✓ Token validated');
+                secureLog.info(`[Google Calendar] Fetching from ${selectedCalendarIds.length} calendar(s)...`);
 
                 // Set default time range (current month ± 1 month)
                 const now = new Date();
                 const defaultTimeMin = timeMin || new Date(now.getFullYear(), now.getMonth() - 1, 1);
                 const defaultTimeMax = timeMax || new Date(now.getFullYear(), now.getMonth() + 2, 0);
-
-                console.log('[Google Calendar] Time range:', {
-                    min: defaultTimeMin.toISOString(),
-                    max: defaultTimeMax.toISOString(),
-                });
-
-                // Fetch events from all selected calendars in parallel
-                console.log('[Google Calendar] Fetching events from', selectedCalendarIds.length, 'calendar(s)...');
 
                 const promises = selectedCalendarIds.map(async (calendarId) => {
                     try {
@@ -170,18 +189,19 @@ export function useGoogleCalendar(timeMin?: Date, timeMax?: Date) {
                             }),
                             {
                                 headers: {
-                                    Authorization: `Bearer ${session.provider_token}`,
+                                    Authorization: `Bearer ${token}`,
                                 },
                             }
                         );
 
                         if (!calendarResponse.ok) {
-                            console.error(`[Google Calendar] Failed to fetch events for ${calendarId}:`, calendarResponse.status);
+                            secureLog.error(`[Google Calendar] Failed to fetch events for ${calendarId}:`,
+                                `${calendarResponse.status}`);
                             return { calendarId, items: [] };
                         }
 
                         const calendarData = await calendarResponse.json();
-                        console.log(`[Google Calendar] Fetched ${calendarData.items?.length || 0} events from ${calendarId}`);
+                        secureLog.info(`[Google Calendar] Fetched ${calendarData.items?.length || 0} events from ${calendarId}`);
 
                         // Create a Set of google_event_ids from Vectodo tasks for efficient filtering
                         const syncedEventIds = new Set(
@@ -190,22 +210,16 @@ export function useGoogleCalendar(timeMin?: Date, timeMax?: Date) {
                                 .filter(Boolean) as string[]
                         );
 
-                        console.log(`[Google Calendar] Filtering out ${syncedEventIds.size} synced events`);
-
                         // Filter out events that are already in Vectodo as tasks
                         const filteredItems = (calendarData.items || []).filter((item: any) => {
-                            const isDuplicate = syncedEventIds.has(item.id);
-                            if (isDuplicate) {
-                                console.log(`[Google Calendar] Skipping duplicate event: ${item.summary} (${item.id})`);
-                            }
-                            return !isDuplicate;
+                            return !syncedEventIds.has(item.id);
                         });
 
-                        console.log(`[Google Calendar] After filtering: ${filteredItems.length} unique events`);
+                        secureLog.info(`[Google Calendar] After filtering: ${filteredItems.length} unique events from ${calendarId}`);
 
                         return { calendarId, items: filteredItems };
                     } catch (err) {
-                        console.error(`[Google Calendar] Error fetching from ${calendarId}:`, err);
+                        secureLog.error(`[Google Calendar] Error fetching from ${calendarId}:`, err);
                         return { calendarId, items: [] };
                     }
                 });
@@ -217,8 +231,6 @@ export function useGoogleCalendar(timeMin?: Date, timeMax?: Date) {
                     items.map((item: any) => {
                         // Detect all-day events: no dateTime means all-day
                         const isAllDay = !item.start?.dateTime && !!item.start?.date;
-
-                        console.log(`[Google Calendar] Event: "${item.summary}", isAllDay: ${isAllDay}, start:`, item.start);
 
                         return {
                             id: `google-${calendarId}-${item.id}`,
@@ -239,24 +251,21 @@ export function useGoogleCalendar(timeMin?: Date, timeMax?: Date) {
                     })
                 );
 
-                console.log('[Google Calendar] ✓ Successfully formatted', allFormattedEvents.length, 'events');
-                console.log('[Google Calendar] All-day events:', allFormattedEvents.filter(e => e.allDay).length);
+                const allDayCount = allFormattedEvents.filter(e => e.allDay).length;
+                secureLog.info(`[Google Calendar] ✓ Formatted ${allFormattedEvents.length} events (${allDayCount} all-day)`);
                 setEvents(allFormattedEvents);
             } catch (err) {
-                console.error('[Google Calendar] ❌ Error fetching events:', err);
-                console.error('[Google Calendar] Error details:', {
-                    message: err instanceof Error ? err.message : 'Unknown error',
-                    stack: err instanceof Error ? err.stack : undefined,
-                });
+                secureLog.error('[Google Calendar] ❌ Error fetching events:',
+                    err instanceof Error ? err.message : 'Unknown error');
                 setError(err instanceof Error ? err.message : 'Unknown error');
             } finally {
                 setLoading(false);
-                console.log('[Google Calendar] Fetch process completed');
+                secureLog.info('[Google Calendar] Fetch process completed');
             }
         };
 
         fetchGoogleEvents();
-    }, [timeMin, timeMax, selectedCalendarIds]);
+    }, [timeMin, timeMax, selectedCalendarIds, tasks]);
 
     return {
         events,
