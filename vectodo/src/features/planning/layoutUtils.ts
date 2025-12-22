@@ -9,7 +9,11 @@ const nodeHeight = 80;
 
 export const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'LR') => {
     const isHorizontal = direction === 'LR';
-    dagreGraph.setGraph({ rankdir: direction });
+    dagreGraph.setGraph({
+        rankdir: direction,
+        ranksep: 100,  // Spacing between ranks (階層間の距離)
+        nodesep: 50,   // Spacing between nodes in the same rank (同階層ノード間の距離)
+    });
 
     nodes.forEach((node) => {
         dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
