@@ -1,16 +1,23 @@
-import { useMemo } from 'react';
-import { Paper, Text, Badge, Group, Stack, Box, ScrollArea } from '@mantine/core';
-import { Calendar, AlertCircle, Repeat } from 'lucide-react';
+import { useState, useMemo, useRef } from 'react';
+import {
+    Paper, Text, Badge, Group, Stack, Box, Drawer,
+    TextInput, Textarea, Select, MultiSelect, Button, Slider
+} from '@mantine/core';
+import { DatePickerInput } from '@mantine/dates';
+import { Calendar } from 'lucide-react';
 import dayjs from 'dayjs';
+
+// --- Types ---
 
 interface TaskNode {
     id: string;
     title: string;
+    description?: string;
     status: 'TODO' | 'DOING' | 'DONE';
-    importance?: number | null;
-    deadline?: string | null;
+    importance: 'high' | 'medium' | 'low';
+    deadline?: Date | null;
+    startDate?: Date | null;
     estimate_minutes?: number | null;
-    recurrence?: boolean;
     dependencies: string[];
 }
 
@@ -20,328 +27,561 @@ interface LayoutNode {
     y: number;
     width: number;
     height: number;
+    level: number;
 }
 
-// Mock data with complex dependencies for scrolling test
-const mockTasks: TaskNode[] = [
+// --- Mock Data ---
+
+const initialTasks: TaskNode[] = [
+    // Level 0
     {
-        id: 'A',
-        title: 'タスクA：要件定義',
+        id: 'root',
+        title: 'Project Alpha Kickoff',
+        description: 'プロジェクトの全体像を確認し、チームのアサインを完了する',
         status: 'DONE',
-        importance: 80,
-        deadline: '2025-12-20T23:59:00',
-        estimate_minutes: 120,
-        dependencies: [], // Root
+        importance: 'high',
+        deadline: new Date('2025-11-01T10:00:00'),
+        dependencies: [],
+    },
+    // Level 1
+    {
+        id: 'req_def',
+        title: '要件定義完了',
+        description: 'クライアント要望をドキュメント化',
+        status: 'DONE',
+        importance: 'high',
+        deadline: new Date('2025-11-05T18:00:00'),
+        dependencies: ['root'],
     },
     {
-        id: 'B1',
-        title: 'B1：UIデザイン',
+        id: 'market_res',
+        title: '市場調査',
+        description: '競合アプリの分析と差別化ポイントの明確化',
         status: 'DONE',
-        importance: 70,
-        deadline: '2025-12-21T23:59:00',
-        estimate_minutes: 180,
-        dependencies: ['A'],
+        importance: 'medium',
+        deadline: new Date('2025-11-04T18:00:00'),
+        dependencies: ['root'],
+    },
+    // Level 2 (Wide - Branching)
+    {
+        id: 'design_ui',
+        title: 'UI/UXデザイン',
+        description: 'Figmaでプロトタイプ作成',
+        status: 'DONE',
+        importance: 'high',
+        deadline: new Date('2025-11-15T18:00:00'),
+        dependencies: ['req_def'],
     },
     {
-        id: 'B2',
-        title: 'B2：DB設計',
+        id: 'design_db',
+        title: 'DBスキーマ設計',
+        description: 'ER図の作成と正規化',
+        status: 'DONE',
+        importance: 'high',
+        deadline: new Date('2025-11-12T18:00:00'),
+        dependencies: ['req_def'],
+    },
+    {
+        id: 'tech_select',
+        title: '技術選定',
+        description: 'フレームワークとインフラ構成の決定',
+        status: 'DONE',
+        importance: 'medium',
+        deadline: new Date('2025-11-10T18:00:00'),
+        dependencies: ['req_def'],
+    },
+    // Level 3 (Wider - Testing Horizontal Scroll)
+    {
+        id: 'impl_fe_1',
+        title: 'FE: 認証機能',
+        description: 'ログイン、サインアップ、パスワードリセット',
         status: 'DOING',
-        importance: 90,
-        deadline: '2025-12-21T23:59:00',
-        estimate_minutes: 120,
-        dependencies: ['A'],
+        importance: 'high',
+        deadline: new Date('2025-11-20T18:00:00'),
+        dependencies: ['design_ui', 'tech_select'],
     },
     {
-        id: 'B3',
-        title: 'B3：API仕様策定',
+        id: 'impl_fe_2',
+        title: 'FE: ダッシュボード',
+        description: 'メイン画面の実装',
         status: 'TODO',
-        importance: 60,
-        deadline: '2025-12-22T23:59:00',
-        estimate_minutes: 90,
-        dependencies: ['A'],
+        importance: 'medium',
+        deadline: new Date('2025-11-25T18:00:00'),
+        dependencies: ['design_ui'],
     },
     {
-        id: 'B4',
-        title: 'B4：環境構築',
-        status: 'TODO',
-        importance: 50,
-        deadline: '2025-12-22T23:59:00',
-        dependencies: ['A'],
+        id: 'impl_be_1',
+        title: 'BE: API実装 Phase 1',
+        description: 'ユーザーCRUDと認証API',
+        status: 'DOING',
+        importance: 'high',
+        deadline: new Date('2025-11-18T18:00:00'),
+        dependencies: ['design_db', 'tech_select'],
     },
     {
-        id: 'C',
-        title: '実装フェーズ',
+        id: 'impl_infra',
+        title: 'AWS環境構築',
+        description: 'VPC, ECS, RDSのTerraform化',
+        status: 'DOING',
+        importance: 'high',
+        deadline: new Date('2025-11-15T18:00:00'),
+        dependencies: ['tech_select'],
+    },
+    // Level 4 (Merging)
+    {
+        id: 'test_integ',
+        title: '結合テスト',
+        description: 'FEとBEを繋ぎこんで動作確認',
         status: 'TODO',
-        importance: 90,
-        deadline: '2025-12-25T23:59:00',
-        estimate_minutes: 600,
-        dependencies: ['B1', 'B2', 'B3', 'B4'], // Merges all
+        importance: 'high',
+        deadline: new Date('2025-12-05T18:00:00'),
+        dependencies: ['impl_fe_1', 'impl_fe_2', 'impl_be_1', 'impl_infra'],
+    },
+    // Level 5
+    {
+        id: 'release',
+        title: 'v1.0 リリース',
+        description: '本番環境へのデプロイ',
+        status: 'TODO',
+        importance: 'high',
+        deadline: new Date('2025-12-10T18:00:00'),
+        dependencies: ['test_integ'],
     },
 ];
 
+// --- Constants ---
+
+const CARD_WIDTH = 150;
+const CARD_HEIGHT = 90; // 少し高さを確保
+const GAP_X = 30;
+const GAP_Y = 80;
+const PADDING = 50;
+
+// --- Helper Components & Functions ---
+
+const getStatusColor = (status: string) => {
+    switch (status) {
+        case 'TODO': return 'gray';
+        case 'DOING': return 'blue';
+        case 'DONE': return 'green';
+        default: return 'gray';
+    }
+};
+
+
+
 export function MobileFlow() {
-    // Configuration constants
-    const CARD_WIDTH = 170;
-    const CARD_HEIGHT = 80;
-    const GAP_X = 16;       // Horizontal space between cards
-    const GAP_Y = 60;       // Vertical space between levels
-    const PADDING_X = 20;   // Container padding
+    // --- State ---
+    const [tasks, setTasks] = useState<TaskNode[]>(initialTasks);
 
-    const layoutData = useMemo(() => {
-        // 1. Calculate Levels (Depth)
-        const levels: Record<string, number> = {};
+    // Canvas State
+    const [offset, setOffset] = useState({ x: 0, y: 0 });
+    const [scale, setScale] = useState(0.8); // Initial scale check
+    const [isDragging, setIsDragging] = useState(false);
+    const dragStartRef = useRef<{ x: number, y: number } | null>(null);
+    const lastOffsetRef = useRef<{ x: number, y: number }>({ x: 0, y: 0 });
+    const hasMovedRef = useRef(false);
 
-        const calculateLevel = (taskId: string): number => {
-            if (taskId in levels) return levels[taskId];
+    // Drawer State
+    const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+    const [editForm, setEditForm] = useState<TaskNode | null>(null);
 
-            const task = mockTasks.find(t => t.id === taskId);
+    // --- Layout Calculation ---
+    const layout = useMemo(() => {
+        const nodeMap = new Map<string, TaskNode>();
+        tasks.forEach(t => nodeMap.set(t.id, t));
+
+        // Calculate levels
+        const levels = new Map<string, number>();
+        const calcLevel = (id: string, visited = new Set<string>()): number => {
+            if (visited.has(id)) return 0; // Cycle detection
+            if (levels.has(id)) return levels.get(id)!;
+
+            visited.add(id);
+            const task = nodeMap.get(id);
             if (!task || task.dependencies.length === 0) {
-                levels[taskId] = 0;
+                levels.set(id, 0);
                 return 0;
             }
 
-            const maxParentLevel = Math.max(
-                ...task.dependencies.map(depId => calculateLevel(depId))
-            );
-            levels[taskId] = maxParentLevel + 1;
-            return levels[taskId];
+            const maxParentLevel = Math.max(...task.dependencies.map(dep => calcLevel(dep, visited)));
+            const level = maxParentLevel + 1;
+            levels.set(id, level);
+            return level;
         };
 
-        mockTasks.forEach(task => calculateLevel(task.id));
+        tasks.forEach(t => calcLevel(t.id));
 
-        // 2. Group by Level
-        const tasksByLevel: Record<number, TaskNode[]> = {};
+        // Group by level
+        const nodesByLevel: Record<number, TaskNode[]> = {};
         let maxLevel = 0;
-        mockTasks.forEach(task => {
-            const level = levels[task.id];
-            if (!tasksByLevel[level]) tasksByLevel[level] = [];
-            tasksByLevel[level].push(task);
-            maxLevel = Math.max(maxLevel, level);
+        tasks.forEach(t => {
+            const lvl = levels.get(t.id) || 0;
+            if (!nodesByLevel[lvl]) nodesByLevel[lvl] = [];
+            nodesByLevel[lvl].push(t);
+            maxLevel = Math.max(maxLevel, lvl);
         });
 
-        // 3. Calculate Layout Coordinates
-        // We need to determine the maximum width of the graph to center everything
+        // Calculate maximum width for centering
         let maxRowWidth = 0;
         const levelWidths: Record<number, number> = {};
-
-        Object.keys(tasksByLevel).forEach(levelStr => {
-            const level = parseInt(levelStr);
-            const count = tasksByLevel[level].length;
-            const rowWidth = count * CARD_WIDTH + (count - 1) * GAP_X;
-            levelWidths[level] = rowWidth;
-            maxRowWidth = Math.max(maxRowWidth, rowWidth);
+        Object.keys(nodesByLevel).forEach(lvlStr => {
+            const lvl = Number(lvlStr);
+            const count = nodesByLevel[lvl].length;
+            const width = count * CARD_WIDTH + (count - 1) * GAP_X;
+            levelWidths[lvl] = width;
+            maxRowWidth = Math.max(maxRowWidth, width);
         });
 
-        const containerWidth = Math.max(320, maxRowWidth + PADDING_X * 2);
+        // Create Layout Nodes
+        const layoutNodes: LayoutNode[] = [];
+        const edges: { from: LayoutNode, to: LayoutNode }[] = [];
+        const nodePositionMap = new Map<string, LayoutNode>();
 
-        const nodes: LayoutNode[] = [];
-        const levelY: Record<number, number> = {};
+        Object.keys(nodesByLevel).forEach(lvlStr => {
+            const lvl = Number(lvlStr);
+            const rowNodes = nodesByLevel[lvl];
+            const rowWidth = levelWidths[lvl];
+            const startX = (maxRowWidth - rowWidth) / 2;
 
-        Object.keys(tasksByLevel).forEach(levelStr => {
-            const level = parseInt(levelStr);
-            const tasksInLevel = tasksByLevel[level];
-            const rowWidth = levelWidths[level];
+            rowNodes.forEach((task, index) => {
+                const x = startX + index * (CARD_WIDTH + GAP_X) + PADDING;
+                const y = lvl * (CARD_HEIGHT + GAP_Y) + PADDING;
 
-            // Center the row
-            const startX = (containerWidth - rowWidth) / 2;
-            const y = PADDING_X + level * (CARD_HEIGHT + GAP_Y);
-            levelY[level] = y;
-
-            tasksInLevel.forEach((task, index) => {
-                const x = startX + index * (CARD_WIDTH + GAP_X);
-                nodes.push({
+                const lNode: LayoutNode = {
                     task,
                     x,
                     y,
                     width: CARD_WIDTH,
                     height: CARD_HEIGHT,
-                });
+                    level: lvl
+                };
+                layoutNodes.push(lNode);
+                nodePositionMap.set(task.id, lNode);
             });
         });
 
-        const totalHeight = (maxLevel + 1) * (CARD_HEIGHT + GAP_Y) + PADDING_X * 2;
-
-        // 4. Calculate Edges
-        const edges: Array<{ from: LayoutNode; to: LayoutNode }> = [];
-        nodes.forEach(node => {
+        // Create Edges
+        layoutNodes.forEach(node => {
             node.task.dependencies.forEach(depId => {
-                const fromNode = nodes.find(n => n.task.id === depId);
-                if (fromNode) {
-                    edges.push({ from: fromNode, to: node });
+                const parent = nodePositionMap.get(depId);
+                if (parent) {
+                    edges.push({ from: parent, to: node });
                 }
             });
         });
 
-        return { nodes, edges, containerWidth, totalHeight };
-    }, []);
+        return { nodes: layoutNodes, edges, width: maxRowWidth + PADDING * 2, height: (maxLevel + 1) * (CARD_HEIGHT + GAP_Y) + PADDING * 2 };
+    }, [tasks]);
 
-    const getStatusConfig = (status: string) => {
-        switch (status) {
-            case 'TODO': return { label: 'TODO', color: 'gray' };
-            case 'DOING': return { label: 'DOING', color: 'blue' };
-            case 'DONE': return { label: 'DONE', color: 'green' };
-            default: return { label: 'TODO', color: 'gray' };
+    // --- Event Handlers ---
+
+    const handlePointerDown = (e: React.PointerEvent) => {
+        setIsDragging(true);
+        dragStartRef.current = { x: e.clientX, y: e.clientY };
+        lastOffsetRef.current = { ...offset };
+        hasMovedRef.current = false;
+        e.currentTarget.setPointerCapture(e.pointerId);
+    };
+
+    const handlePointerMove = (e: React.PointerEvent) => {
+        if (!isDragging || !dragStartRef.current) return;
+
+        const dx = e.clientX - dragStartRef.current.x;
+        const dy = e.clientY - dragStartRef.current.y;
+
+        if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+            hasMovedRef.current = true;
         }
+
+        setOffset({
+            x: lastOffsetRef.current.x + dx,
+            y: lastOffsetRef.current.y + dy
+        });
     };
 
-    const getEstimateText = (minutes: number | null | undefined) => {
-        if (!minutes) return null;
-        if (minutes < 60) return { val: minutes, unit: 'm' };
-        return { val: Math.round(minutes / 60 * 10) / 10, unit: 'h' };
+    const handlePointerUp = (e: React.PointerEvent) => {
+        setIsDragging(false);
+        dragStartRef.current = null;
+        e.currentTarget.releasePointerCapture(e.pointerId);
     };
 
-    const createBezierPath = (from: LayoutNode, to: LayoutNode) => {
+    const handleCardClick = (task: TaskNode) => {
+        if (hasMovedRef.current) return; // Prevent click after drag
+        setEditForm({ ...task }); // Clone for editing
+        setActiveTaskId(task.id);
+    };
+
+    const handleSave = () => {
+        if (!editForm) return;
+        setTasks(prev => prev.map(t => t.id === editForm.id ? editForm : t));
+        setActiveTaskId(null);
+    };
+
+    // --- Drawing Helpers ---
+
+    const createPath = (from: LayoutNode, to: LayoutNode) => {
         const fromX = from.x + from.width / 2;
-        const fromY = from.y + from.height; // Bottom of source
+        const fromY = from.y + from.height;
         const toX = to.x + to.width / 2;
-        const toY = to.y; // Top of target
+        const toY = to.y;
 
         const midY = (fromY + toY) / 2;
-        // Adjust control points for smoother curves
+        // Bezier curve
         return `M ${fromX} ${fromY} C ${fromX} ${midY}, ${toX} ${midY}, ${toX} ${toY}`;
     };
 
     return (
-        <ScrollArea
-            type="auto"
+        <Box
             style={{
                 width: '100%',
-                height: '100%',
-                backgroundColor: 'var(--mantine-color-body)',
+                height: 'calc(100vh - 130px)', // Header 60px + Footer 70px
+                overflow: 'hidden',
+                position: 'relative',
+                backgroundColor: '#1A1B1E', // Dark 7
+                cursor: isDragging ? 'grabbing' : 'grab',
+                userSelect: 'none',
+                touchAction: 'none' // Prevent default touch actions like scroll
+            }}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerUp} // Safety net
+            onWheel={(e) => {
+                if (e.ctrlKey || e.metaKey) {
+                    e.preventDefault();
+                    const newScale = Math.min(Math.max(scale - e.deltaY * 0.001, 0.1), 2);
+                    setScale(newScale);
+                }
             }}
         >
-            <Box
+            {/* Background Grid Pattern */}
+            <div
                 style={{
-                    position: 'relative',
-                    width: `${layoutData.containerWidth}px`,
-                    height: `${layoutData.totalHeight}px`,
+                    position: 'absolute',
+                    inset: 0,
+                    backgroundImage: 'radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px)',
+                    backgroundSize: `${20 * scale}px ${20 * scale}px`,
+                    backgroundPosition: `${offset.x}px ${offset.y}px`,
+                    pointerEvents: 'none'
                 }}
-            >
-                {/* 1. Edges Layer (Bottom) */}
+            />
+
+            {/* Content Container */}
+            <div style={{
+                transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+                transformOrigin: '0 0',
+                width: '100%',
+                height: '100%'
+            }}>
+
+                {/* SVG Layer */}
                 <svg
                     style={{
                         position: 'absolute',
                         top: 0,
                         left: 0,
-                        width: '100%',
-                        height: '100%',
+                        width: Math.max(layout.width, 2000), // Ensure large enough
+                        height: Math.max(layout.height, 2000),
                         pointerEvents: 'none',
-                        zIndex: 1,
+                        zIndex: 1
                     }}
                 >
                     <defs>
                         <marker
-                            id="arrowhead-flow"
+                            id="flow-arrow"
                             markerWidth="10"
                             markerHeight="7"
                             refX="9"
                             refY="3.5"
                             orient="auto"
                         >
-                            <polygon
-                                points="0 0, 10 3.5, 0 7"
-                                fill="var(--mantine-color-gray-4)"
-                            />
+                            <polygon points="0 0, 10 3.5, 0 7" fill="#adb5bd" />
                         </marker>
                     </defs>
-                    {layoutData.edges.map((edge, i) => (
+                    {layout.edges.map((edge, i) => (
                         <path
-                            key={`edge-${i}`}
-                            d={createBezierPath(edge.from, edge.to)}
-                            stroke="var(--mantine-color-gray-4)"
+                            key={i}
+                            d={createPath(edge.from, edge.to)}
+                            stroke="#adb5bd"
                             strokeWidth="2"
                             fill="none"
-                            markerEnd="url(#arrowhead-flow)"
+                            markerEnd="url(#flow-arrow)"
                         />
                     ))}
                 </svg>
 
-                {/* 2. Nodes Layer (Top) */}
-                {layoutData.nodes.map(({ task, x, y, width, height }) => {
-                    const statusConfig = getStatusConfig(task.status);
-                    const deadline = task.deadline ? dayjs(task.deadline) : null;
-                    const isOverdue = deadline ? deadline.isBefore(dayjs(), 'day') : false;
-                    const deadlineText = deadline ? deadline.format('M/D') : null;
-                    const estimate = getEstimateText(task.estimate_minutes);
+                {/* Nodes Layer */}
+                {layout.nodes.map(node => {
+                    const statusColor = getStatusColor(node.task.status);
+                    const deadlineText = node.task.deadline ? dayjs(node.task.deadline).format('M/D') : null;
+                    const isOverdue = node.task.deadline && dayjs().isAfter(node.task.deadline);
 
                     return (
                         <Paper
-                            key={task.id}
+                            key={node.task.id}
                             shadow="sm"
                             withBorder
                             p="xs"
                             radius="md"
+                            onClick={(e) => {
+                                e.stopPropagation(); // Prevent drag start logic if needed, but here we handled via hasMoved
+                                handleCardClick(node.task);
+                            }}
                             style={{
                                 position: 'absolute',
-                                left: `${x}px`,
-                                top: `${y}px`,
-                                width: `${width}px`,
-                                height: `${height}px`, // Fixed height for consistency
-                                borderLeft: `5px solid var(--mantine-color-${statusConfig.color}-filled)`,
+                                left: node.x,
+                                top: node.y,
+                                width: node.width,
+                                height: node.height,
+                                borderLeft: `5px solid var(--mantine-color-${statusColor}-filled)`,
                                 zIndex: 10,
-                                backgroundColor: 'var(--mantine-color-paper)',
+                                cursor: 'pointer',
+                                transition: 'transform 0.1s, box-shadow 0.1s',
+                                backgroundColor: '#25262B', // Dark 6
+                                color: '#C1C2C5',
                             }}
                         >
-                            <Stack gap={4} justify="space-between" h="100%">
-                                {/* Top Row: Title */}
-                                <Text
-                                    size="xs"
-                                    fw={700}
-                                    lineClamp={2}
-                                    lh={1.2}
-                                    title={task.title}
-                                >
-                                    {task.title}
+                            <Stack gap={4} h="100%" justify="space-between">
+                                <Text size="xs" fw={700} lineClamp={2} lh={1.3} c="#C1C2C5">
+                                    {node.task.title}
                                 </Text>
 
-                                {/* Bottom Row: Meta Info */}
-                                <Group justify="space-between" align="end" gap={4} wrap="nowrap">
-                                    <Group gap={4}>
-                                        <Badge
-                                            size="xs"
-                                            radius="sm"
-                                            color={statusConfig.color}
-                                            variant="light"
-                                            px={4}
-                                            style={{ textTransform: 'none', fontSize: '10px', height: '18px' }}
-                                        >
-                                            {statusConfig.label}
-                                        </Badge>
+                                <Group justify="space-between" align="end" gap={0}>
+                                    <Badge
+                                        color={getStatusColor(node.task.status)}
+                                        variant="light"
+                                        size="xs"
+                                        radius="sm"
+                                        px={4}
+                                        h={18}
+                                        style={{ fontSize: '10px' }}
+                                    >
+                                        {node.task.status}
+                                    </Badge>
 
-                                        {deadlineText && (
-                                            <Group gap={2}>
-                                                <Calendar size={10} color={isOverdue ? 'var(--mantine-color-red-6)' : 'var(--mantine-color-dimmed)'} />
-                                                <Text
-                                                    size="xs"
-                                                    c={isOverdue ? 'red' : 'dimmed'}
-                                                    fw={isOverdue ? 700 : 500}
-                                                    style={{ fontSize: '10px' }}
-                                                >
-                                                    {deadlineText}
-                                                </Text>
-                                            </Group>
-                                        )}
-                                    </Group>
-
-                                    {estimate && (
-                                        <Text
-                                            size="sm"
-                                            fw={700}
-                                            style={{ lineHeight: 1 }}
-                                            c="dimmed"
-                                        >
-                                            {estimate.val}
-                                            <Text span size="xs" fw={500} style={{ fontSize: '9px' }}>
-                                                {estimate.unit}
+                                    {deadlineText && (
+                                        <Group gap={2}>
+                                            <Calendar size={10} color={isOverdue ? 'red' : 'gray'} />
+                                            <Text size="xs" c={isOverdue ? 'red' : 'dimmed'} style={{ fontSize: '10px' }} fw={700}>
+                                                {deadlineText}
                                             </Text>
-                                        </Text>
+                                        </Group>
                                     )}
                                 </Group>
                             </Stack>
                         </Paper>
                     );
                 })}
-            </Box>
-        </ScrollArea>
+            </div>
+
+            {/* Zoom Control */}
+            <Paper
+                shadow="md"
+                p="xs"
+                style={{
+                    position: 'absolute',
+                    bottom: 20,
+                    left: 20,
+                    zIndex: 100,
+                    width: 150,
+                    opacity: 0.9,
+                    backgroundColor: '#25262B',
+                    color: '#C1C2C5',
+                    border: '1px solid #373A40'
+                }}
+            >
+                <Text size="xs" mb={4} fw={500} c="#C1C2C5">Zoom: {Math.round(scale * 100)}%</Text>
+                <Slider
+                    value={scale}
+                    onChange={setScale}
+                    min={0.1}
+                    max={1.5}
+                    step={0.1}
+                    size="sm"
+                    label={null}
+                />
+            </Paper>
+
+            {/* Edit Drawer */}
+            <Drawer
+                opened={!!activeTaskId}
+                onClose={() => setActiveTaskId(null)}
+                position="bottom"
+                size="90%"
+                title={<Text fw={700}>タスク編集</Text>}
+                padding="md"
+                zIndex={2000}
+            >
+                {editForm && (
+                    <Stack gap="md" pb={50}>
+                        <TextInput
+                            label="タイトル"
+                            placeholder="タスク名を入力"
+                            value={editForm.title}
+                            onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                            required
+                        />
+
+                        <Textarea
+                            label="詳細"
+                            placeholder="詳細説明..."
+                            value={editForm.description || ''}
+                            onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                            minRows={2}
+                        />
+
+                        <Group grow>
+                            <Select
+                                label="ステータス"
+                                value={editForm.status}
+                                onChange={(val) => val && setEditForm({ ...editForm, status: val as any })}
+                                data={[
+                                    { value: 'TODO', label: 'TODO' },
+                                    { value: 'DOING', label: 'DOING' },
+                                    { value: 'DONE', label: 'DONE' },
+                                ]}
+                            />
+                            <Select
+                                label="重要度"
+                                value={editForm.importance}
+                                onChange={(val) => val && setEditForm({ ...editForm, importance: val as any })}
+                                data={[
+                                    { value: 'high', label: '高' },
+                                    { value: 'medium', label: '中' },
+                                    { value: 'low', label: '低' },
+                                ]}
+                            />
+                        </Group>
+
+                        <DatePickerInput
+                            label="期限"
+                            placeholder="日付を選択"
+                            value={editForm.deadline || null}
+                            onChange={(date) => setEditForm({ ...editForm, deadline: date })}
+                            leftSection={<Calendar size={16} />}
+                            clearable
+                        />
+
+                        <MultiSelect
+                            label="前提タスク (依存関係)"
+                            placeholder="依存するタスクを選択"
+                            data={tasks
+                                .filter(t => t.id !== editForm.id) // Exclude self
+                                .map(t => ({ value: t.id, label: t.title }))
+                            }
+                            value={editForm.dependencies}
+                            onChange={(vals) => setEditForm({ ...editForm, dependencies: vals })}
+                            searchable
+                            clearable
+                        />
+
+                        <Button fullWidth onClick={handleSave} mt="md" size="md">
+                            保存する
+                        </Button>
+                    </Stack>
+                )}
+            </Drawer>
+        </Box>
     );
 }
