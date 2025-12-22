@@ -26,15 +26,18 @@ export function TaskList({ onTaskClick }: TaskListProps) {
         completeTasks,
         updateTaskStatus,
         updateTaskImportance,
+        updateTask,
         setCurrentProject
     } = useTaskStore();
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
     const [editingTitle, setEditingTitle] = useState<string>('');
 
+    // Fetch tasks only on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => {
         fetchTasks();
-    }, [fetchTasks]);
+    }, []);
 
     // Filter with AND condition: hierarchy scope AND completion status
     const displayTasks = useMemo(() => {
@@ -94,73 +97,30 @@ export function TaskList({ onTaskClick }: TaskListProps) {
             return;
         }
 
-        const { supabase } = await import('../lib/supabaseClient');
-        const { error } = await supabase
-            .from('tasks')
-            .update({ title: newTitle.trim() })
-            .eq('id', taskId);
-
-        if (error) {
-            console.error('Failed to update title:', error);
-        }
-
+        await updateTask(taskId, { title: newTitle.trim() });
         setEditingTaskId(null);
         setEditingTitle('');
-        await fetchTasks();
     };
 
     // Handle schedule start time change
     const handleScheduleStartChange = async (taskId: string, dateValue: string | null) => {
         const date = dateValue ? new Date(dateValue) : null;
-        const { supabase } = await import('../lib/supabaseClient');
-        const { error } = await supabase
-            .from('tasks')
-            .update({
-                planned_start: date?.toISOString() ?? null,
-                planned_end: null // Clear end when changing start independently
-            })
-            .eq('id', taskId);
-
-        if (error) {
-            console.error('Failed to update schedule:', error);
-            return;
-        }
-
-        await fetchTasks();
+        await updateTask(taskId, {
+            planned_start: date?.toISOString() ?? null,
+            planned_end: null // Clear end when changing start independently
+        });
     };
 
     // Handle schedule end time change
     const handleScheduleEndChange = async (taskId: string, dateValue: string | null) => {
         const date = dateValue ? new Date(dateValue) : null;
-        const { supabase } = await import('../lib/supabaseClient');
-        const { error } = await supabase
-            .from('tasks')
-            .update({ planned_end: date?.toISOString() ?? null })
-            .eq('id', taskId);
-
-        if (error) {
-            console.error('Failed to update schedule end:', error);
-            return;
-        }
-
-        await fetchTasks();
+        await updateTask(taskId, { planned_end: date?.toISOString() ?? null });
     };
 
     // Handle deadline change
     const handleDeadlineChange = async (taskId: string, dateValue: string | null) => {
         const date = dateValue ? new Date(dateValue) : null;
-        const { supabase } = await import('../lib/supabaseClient');
-        const { error } = await supabase
-            .from('tasks')
-            .update({ deadline: date?.toISOString() ?? null })
-            .eq('id', taskId);
-
-        if (error) {
-            console.error('Failed to update deadline:', error);
-            return;
-        }
-
-        await fetchTasks();
+        await updateTask(taskId, { deadline: date?.toISOString() ?? null });
     };
 
     // Handle single task delete
