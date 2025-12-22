@@ -5,6 +5,17 @@ import { createGoogleEvent, updateGoogleEvent, deleteGoogleEvent } from '../util
 import { useToastStore } from './useToastStore';
 import { calculateNextDueDate, type Recurrence } from '../utils/recurrence';
 
+// Helper function to get current user ID
+const getCurrentUserId = async (): Promise<string> => {
+    const { data: { user }, error } = await supabase.auth.getUser();
+
+    if (error || !user) {
+        throw new Error('ユーザー認証が必要です。ログインしてください。');
+    }
+
+    return user.id;
+};
+
 type Task = Tables<'tasks'>;
 
 export interface TaskData {
@@ -232,6 +243,9 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     addTask: async (taskData: TaskData) => {
         set({ loading: true, error: null });
         try {
+            // Get current user ID
+            const userId = await getCurrentUserId();
+
             // Generate unique slug based on global maximum across ALL tasks
             const allTasks = get().tasks;
             const maxSlug = allTasks.reduce((max, task) => {
@@ -255,6 +269,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
                     importance: taskData.importance,
                     description: taskData.description,
                     recurrence: taskData.recurrence as any, // Cast to any for Json compatibility
+                    user_id: userId, // Add user_id for RLS
                 })
                 .select()
                 .single();
@@ -539,11 +554,15 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
                 return;
             }
 
+            // Get current user ID
+            const userId = await getCurrentUserId();
+
             const { error } = await supabase
                 .from('task_dependencies')
                 .insert({
                     predecessor_id: predecessorId,
                     successor_id: successorId,
+                    user_id: userId, // Add user_id for RLS
                 });
 
             if (error) throw error;

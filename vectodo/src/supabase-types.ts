@@ -43,16 +43,19 @@ export type Database = {
           created_at: string
           predecessor_id: string
           successor_id: string
+          user_id: string
         }
         Insert: {
           created_at?: string
           predecessor_id: string
           successor_id: string
+          user_id?: string
         }
         Update: {
           created_at?: string
           predecessor_id?: string
           successor_id?: string
+          user_id?: string
         }
         Relationships: [
           {
@@ -92,6 +95,7 @@ export type Database = {
           google_calendar_id: string | null
           completed_at: string | null
           recurrence: Json | null
+          user_id: string
         }
         Insert: {
           actual_minutes?: number | null
@@ -113,6 +117,7 @@ export type Database = {
           google_calendar_id?: string | null
           completed_at?: string | null
           recurrence?: Json | null
+          user_id?: string
         }
         Update: {
           actual_minutes?: number | null
@@ -134,6 +139,7 @@ export type Database = {
           google_calendar_id?: string | null
           completed_at?: string | null
           recurrence?: Json | null
+          user_id?: string
         }
         Relationships: [
           {
