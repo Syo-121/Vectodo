@@ -59,17 +59,9 @@ export function KanbanCard({ task, onDrillDown, onEdit }: KanbanCardProps) {
             <Stack gap="xs">
                 {/* Title with Edit Button */}
                 <Group justify="space-between" align="flex-start" wrap="nowrap">
-                    <Group gap="xs" style={{ flex: 1, minWidth: 0 }}>
-                        <Text fw={600} size="sm" lineClamp={2} style={{ flex: 1 }}>
-                            {task.title}
-                        </Text>
-                        {/* Recurrence indicator */}
-                        {task.recurrence && (
-                            <Tooltip label="繰り返しタスク">
-                                <Repeat size={14} color="var(--mantine-color-blue-6)" style={{ flexShrink: 0 }} />
-                            </Tooltip>
-                        )}
-                    </Group>
+                    <Text fw={600} size="sm" lineClamp={2} style={{ flex: 1 }}>
+                        {task.title}
+                    </Text>
                     <ActionIcon
                         size="sm"
                         variant="subtle"
@@ -93,19 +85,29 @@ export function KanbanCard({ task, onDrillDown, onEdit }: KanbanCardProps) {
 
                 {/* Metadata Row 1: Deadlines & Time */}
                 <Group gap="xs" wrap="wrap">
-                    {/* Deadline */}
-                    {hasDeadline && (
-                        <Badge
-                            size="xs"
-                            color={isOverdue ? 'red' : 'gray'}
-                            variant="light"
-                            leftSection={<Clock size={12} />}
-                        >
-                            {new Date(task.deadline!).toLocaleDateString('ja-JP', {
-                                month: 'short',
-                                day: 'numeric',
-                            })}
-                        </Badge>
+                    {/* Deadline + Recurrence */}
+                    {(hasDeadline || task.recurrence) && (
+                        <Group gap={4} wrap="nowrap">
+                            {hasDeadline && (
+                                <Badge
+                                    size="xs"
+                                    color={isOverdue ? 'red' : 'gray'}
+                                    variant="light"
+                                    leftSection={<Clock size={12} />}
+                                >
+                                    {new Date(task.deadline!).toLocaleDateString('ja-JP', {
+                                        month: 'short',
+                                        day: 'numeric',
+                                    })}
+                                </Badge>
+                            )}
+                            {/* Recurrence indicator */}
+                            {task.recurrence && (
+                                <Tooltip label="繰り返しタスク">
+                                    <Repeat size={14} style={{ flexShrink: 0, opacity: 0.6 }} />
+                                </Tooltip>
+                            )}
+                        </Group>
                     )}
 
                     {/* Estimate time */}

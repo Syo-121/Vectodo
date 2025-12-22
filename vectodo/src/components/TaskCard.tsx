@@ -131,7 +131,7 @@ export function TaskCard({ task, onEdit }: TaskCardProps) {
                                 {/* Recurrence indicator */}
                                 {task.recurrence && (
                                     <Tooltip label="繰り返しタスク">
-                                        <Repeat size={16} color="var(--mantine-color-blue-6)" />
+                                        <Repeat size={16} style={{ opacity: 0.6 }} />
                                     </Tooltip>
                                 )}
                                 {/* Subtask count badge */}

@@ -124,7 +124,7 @@ export const TaskNode = memo(({ data, selected }: NodeProps<TaskNodeData>) => {
                                 {/* Recurrence indicator */}
                                 {data.recurrence && (
                                     <Tooltip label="繰り返しタスク">
-                                        <Repeat size={12} color="var(--mantine-color-blue-6)" style={{ flexShrink: 0 }} />
+                                        <Repeat size={12} style={{ flexShrink: 0, opacity: 0.6 }} />
                                     </Tooltip>
                                 )}
                             </Group>

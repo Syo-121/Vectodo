@@ -517,12 +517,6 @@ export function TaskList({ onTaskClick }: TaskListProps) {
                                                     autoComplete="off"
                                                     style={{ maxWidth: '360px', flexGrow: 1 }}
                                                 />
-                                                {/* Recurrence indicator */}
-                                                {task.recurrence && (
-                                                    <Tooltip label="繰り返しタスク">
-                                                        <Repeat size={14} color="var(--mantine-color-blue-6)" style={{ flexShrink: 0 }} />
-                                                    </Tooltip>
-                                                )}
                                             </Group>
                                         </Table.Td>
 
@@ -555,21 +549,29 @@ export function TaskList({ onTaskClick }: TaskListProps) {
                                             />
                                         </Table.Td>
 
-                                        {/* Deadline - Inline Editable */}
+                                        {/* Deadline - Inline Editable + Recurrence */}
                                         <Table.Td onClick={(e) => e.stopPropagation()}>
-                                            <DateTimePicker
-                                                value={task.deadline ? task.deadline : null}
-                                                onChange={(date) => handleDeadlineChange(task.id, date)}
-                                                clearable
-                                                placeholder="未設定"
-                                                size="xs"
-                                                variant="unstyled"
-                                                valueFormat="M月D日"
-                                                style={{
-                                                    width: '100%',
-                                                    color: isOverdue && task.deadline ? 'var(--mantine-color-red-6)' : undefined
-                                                }}
-                                            />
+                                            <Group gap="xs" wrap="nowrap">
+                                                <DateTimePicker
+                                                    value={task.deadline ? task.deadline : null}
+                                                    onChange={(date) => handleDeadlineChange(task.id, date)}
+                                                    clearable
+                                                    placeholder="未設定"
+                                                    size="xs"
+                                                    variant="unstyled"
+                                                    valueFormat="M月D日"
+                                                    style={{
+                                                        flexGrow: 1,
+                                                        color: isOverdue && task.deadline ? 'var(--mantine-color-red-6)' : undefined
+                                                    }}
+                                                />
+                                                {/* Recurrence indicator */}
+                                                {task.recurrence && (
+                                                    <Tooltip label="繰り返しタスク">
+                                                        <Repeat size={14} style={{ flexShrink: 0, opacity: 0.6 }} />
+                                                    </Tooltip>
+                                                )}
+                                            </Group>
                                         </Table.Td>
 
                                         {/* Actions: Edit & Delete */}
