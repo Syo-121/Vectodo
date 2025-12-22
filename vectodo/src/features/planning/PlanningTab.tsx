@@ -55,25 +55,28 @@ export function PlanningTab() {
         );
     }, [scopedTasks, dependencies]);
 
-    // Load saved DAG positions from localStorage
-    const loadDagPositions = (): Record<string, { x: number; y: number }> => {
+    // Load saved DAG positions from localStorage (project-specific)
+    const loadDagPositions = useCallback((): Record<string, { x: number; y: number }> => {
         try {
-            const saved = localStorage.getItem('vectodo-dag-positions');
+            const key = `vectodo-flow-positions-${currentProjectId || 'default'}`;
+            const saved = localStorage.getItem(key);
             return saved ? JSON.parse(saved) : {};
         } catch (error) {
-            console.error('[DAG] Failed to load positions:', error);
+            console.error('[Flow] Failed to load positions:', error);
             return {};
         }
-    };
+    }, [currentProjectId]);
 
-    // Save DAG positions to localStorage
-    const saveDagPositions = (positions: Record<string, { x: number; y: number }>) => {
+    // Save DAG positions to localStorage (project-specific)
+    const saveDagPositions = useCallback((positions: Record<string, { x: number; y: number }>) => {
         try {
-            localStorage.setItem('vectodo-dag-positions', JSON.stringify(positions));
+            const key = `vectodo-flow-positions-${currentProjectId || 'default'}`;
+            localStorage.setItem(key, JSON.stringify(positions));
+            console.log(`[Flow] Saved positions for project ${currentProjectId || 'default'}:`, Object.keys(positions).length, 'nodes');
         } catch (error) {
-            console.error('[DAG] Failed to save positions:', error);
+            console.error('[Flow] Failed to save positions:', error);
         }
-    };
+    }, [currentProjectId]);
 
     // Convert scoped tasks to nodes with saved positions
     const initialNodes: Node[] = useMemo(() => {
@@ -105,6 +108,7 @@ export function PlanningTab() {
             id: `${dep.predecessor_id}-${dep.successor_id}`,
             source: dep.predecessor_id,
             target: dep.successor_id,
+            type: 'bezier',  // Smooth bezier curves for horizontal layout
             markerEnd: { type: MarkerType.ArrowClosed },
             animated: false,
         }));
@@ -119,9 +123,9 @@ export function PlanningTab() {
             const savedPositions = loadDagPositions();
             savedPositions[node.id] = node.position;
             saveDagPositions(savedPositions);
-            console.log(`[DAG] Saved position for node ${node.id}:`, node.position);
+            console.log(`[Flow] Saved position for node ${node.id}:`, node.position);
         },
-        [saveDagPositions]
+        [loadDagPositions, saveDagPositions]
     );
 
     // Update nodes and edges when tasks or dependencies change
@@ -179,6 +183,7 @@ export function PlanningTab() {
                 addEdge(
                     {
                         ...connection,
+                        type: 'bezier',
                         markerEnd: { type: MarkerType.ArrowClosed },
                     },
                     eds
@@ -221,7 +226,15 @@ export function PlanningTab() {
 
         setNodes(layouted.nodes);
         setEdges(layouted.edges);
-    }, [nodes, edges, setNodes, setEdges]);
+
+        // Save the new positions after auto-layout
+        const newPositions: Record<string, { x: number; y: number }> = {};
+        layouted.nodes.forEach(node => {
+            newPositions[node.id] = node.position;
+        });
+        saveDagPositions(newPositions);
+        console.log('[Flow] Saved auto-layout positions');
+    }, [nodes, edges, setNodes, setEdges, saveDagPositions]);
 
     // Node click handler
     // Handle node click - drill down into task hierarchy
@@ -271,11 +284,14 @@ export function PlanningTab() {
                 onConnect={onConnect}
                 onNodeClick={onNodeClick}
                 nodeTypes={nodeTypes}
+                defaultEdgeOptions={{
+                    type: 'bezier',
+                    style: { strokeWidth: 2 },
+                }}
                 fitView
                 // Multi-selection features
                 selectionOnDrag={true}           // Enable box selection by dragging
                 panOnDrag={[1, 2]}              // Pan with middle/right mouse button only
-                selectionMode="partial"          // Select nodes even if partially in selection box
                 multiSelectionKeyCode="Control"  // Ctrl/Cmd for multi-select
                 deleteKeyCode="Delete"           // Delete key to remove selected nodes
             >
