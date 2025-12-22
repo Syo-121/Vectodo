@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient';
 import type { Tables } from '../supabase-types';
 import { createGoogleEvent, updateGoogleEvent, deleteGoogleEvent } from '../utils/googleCalendarSync';
 import { useToastStore } from './useToastStore';
+import { calculateNextDueDate, type Recurrence } from '../utils/recurrence';
 
 type Task = Tables<'tasks'>;
 
@@ -17,6 +18,7 @@ export interface TaskData {
     parent_id?: string | null;
     planned_start?: string | null;
     planned_end?: string | null;
+    recurrence?: Recurrence | null;
 }
 
 export interface TaskDependency {
@@ -252,6 +254,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
                     deadline: taskData.deadline,
                     importance: taskData.importance,
                     description: taskData.description,
+                    recurrence: taskData.recurrence as any, // Cast to any for Json compatibility
                 })
                 .select()
                 .single();
@@ -347,14 +350,20 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
         }
     },
 
-    updateTask: async (taskId: string, updates: Partial<Task>) => {
+    updateTask: async (taskId: string, updates: Partial<TaskData>) => {
         set({ loading: true, error: null });
         try {
             console.log('Updating task:', taskId, updates);
 
+            // Convert recurrence for database compatibility
+            const dbUpdates: any = { ...updates };
+            if (updates.recurrence !== undefined) {
+                dbUpdates.recurrence = updates.recurrence as any;
+            }
+
             const { data, error } = await supabase
                 .from('tasks')
-                .update(updates)
+                .update(dbUpdates)
                 .eq('id', taskId)
                 .select()
                 .single();
@@ -613,6 +622,40 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
             }
 
             console.log('[TaskStore] Status updated in DB successfully');
+
+            // Handle recurrence: create next task if status is DONE and recurrence is set
+            if (status === 'DONE' && originalTask.recurrence && originalTask.deadline) {
+                try {
+                    console.log('[TaskStore] Task has recurrence, creating next occurrence...');
+                    const recurrence = originalTask.recurrence as unknown as Recurrence;
+                    const currentDueDate = new Date(originalTask.deadline);
+                    const nextDueDate = calculateNextDueDate(currentDueDate, recurrence);
+
+                    console.log('[TaskStore] Next due date calculated:', nextDueDate);
+
+                    // Create next task (duplicate with new deadline)
+                    const nextTaskData: TaskData = {
+                        title: originalTask.title,
+                        project_id: originalTask.project_id,
+                        description: originalTask.description,
+                        estimate_minutes: originalTask.estimate_minutes,
+                        importance: originalTask.importance,
+                        deadline: nextDueDate.toISOString(),
+                        recurrence: recurrence,
+                        parent_id: originalTask.parent_id,
+                        // Don't copy planned_start/planned_end - let user reschedule
+                        planned_start: null,
+                        planned_end: null,
+                    };
+
+                    await get().addTask(nextTaskData);
+                    console.log('[TaskStore] ✅ Next recurring task created successfully');
+                    useToastStore.getState().addToast('次回の繰り返しタスクを作成しました', 'success');
+                } catch (recurrenceError) {
+                    console.error('[TaskStore] Failed to create recurring task:', recurrenceError);
+                    useToastStore.getState().addToast('繰り返しタスクの作成に失敗しました', 'error');
+                }
+            }
 
             // Show success notification
             useToastStore.getState().addToast('ステータスを更新しました', 'success');

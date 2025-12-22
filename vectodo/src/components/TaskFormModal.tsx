@@ -1,6 +1,6 @@
 import '@mantine/core/styles.css';
 import '@mantine/dates/styles.css';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
     Modal,
     TextInput,
@@ -14,15 +14,18 @@ import {
     SegmentedControl,
     Text,
     Divider,
+    Chip,
+    Collapse,
 } from '@mantine/core';
 import { DateInput, DateTimePicker } from '@mantine/dates';
 import { useForm } from '@mantine/form';
 import { modals } from '@mantine/modals';
-import { Save, Trash2, Clock, Zap } from 'lucide-react';
+import { Save, Trash2, Clock, Zap, Repeat } from 'lucide-react';
 import { useTaskStore, type TaskData } from '../stores/taskStore';
 import { TEST_PROJECT_ID } from '../lib/constants';
 import type { Tables } from '../supabase-types';
 import dayjs from 'dayjs';
+import { type Recurrence } from '../utils/recurrence';
 
 type Task = Tables<'tasks'>;
 
@@ -79,6 +82,10 @@ export function TaskFormModal({ opened, onClose, task, onUnschedule }: TaskFormM
             planned_start: null as Date | null,
             planned_end: null as Date | null,
             parent_id: '',
+            recurrencePreset: 'none' as string,
+            customInterval: 1,
+            customType: 'daily' as 'daily' | 'weekly' | 'monthly',
+            customDaysOfWeek: [] as number[],
         },
         validate: {
             title: (value) => (!value || value.trim() === '' ? 'タイトルは必須です' : null),
@@ -88,9 +95,38 @@ export function TaskFormModal({ opened, onClose, task, onUnschedule }: TaskFormM
         validateInputOnChange: true,
     });
 
+    const [showCustomRecurrence, setShowCustomRecurrence] = useState(false);
+
     // Reset form when task changes
     useEffect(() => {
         if (opened) {
+            let preset = 'none';
+            let customInterval = 1;
+            let customType: 'daily' | 'weekly' | 'monthly' = 'daily';
+            let customDaysOfWeek: number[] = [];
+
+            if (task?.recurrence) {
+                const rec = task.recurrence as unknown as Recurrence;
+                // Try to match preset patterns
+                if (rec.type === 'daily' && rec.interval === 1) {
+                    preset = 'daily';
+                } else if (rec.type === 'weekly' && rec.interval === 1) {
+                    if (rec.days_of_week && JSON.stringify([...rec.days_of_week].sort()) === JSON.stringify([1, 2, 3, 4, 5])) {
+                        preset = 'weekdays';
+                    } else {
+                        preset = 'weekly';
+                    }
+                } else if (rec.type === 'monthly' && rec.interval === 1) {
+                    preset = 'monthly';
+                } else {
+                    preset = 'custom';
+                }
+
+                customInterval = rec.interval;
+                customType = rec.type;
+                customDaysOfWeek = rec.days_of_week || [];
+            }
+
             form.setValues({
                 title: task?.title || '',
                 description: task?.description || '',
@@ -101,12 +137,41 @@ export function TaskFormModal({ opened, onClose, task, onUnschedule }: TaskFormM
                 planned_start: task?.planned_start ? new Date(task.planned_start) : null,
                 planned_end: task?.planned_end ? new Date(task.planned_end) : null,
                 parent_id: task?.parent_id || '',
+                recurrencePreset: preset,
+                customInterval,
+                customType,
+                customDaysOfWeek,
             });
+            setShowCustomRecurrence(preset === 'custom');
         }
     }, [task, opened]);
 
     const handleSubmit = async (values: typeof form.values) => {
         try {
+            // Build recurrence object based on preset or custom settings
+            let recurrence: Recurrence | null = null;
+
+            if (values.recurrencePreset === 'daily') {
+                recurrence = { type: 'daily', interval: 1 };
+            } else if (values.recurrencePreset === 'weekdays') {
+                recurrence = { type: 'weekly', interval: 1, days_of_week: [1, 2, 3, 4, 5] };
+            } else if (values.recurrencePreset === 'weekly') {
+                // Default to current day of week if deadline is set
+                const dayOfWeek = values.deadline ? values.deadline.getDay() : new Date().getDay();
+                recurrence = { type: 'weekly', interval: 1, days_of_week: [dayOfWeek] };
+            } else if (values.recurrencePreset === 'monthly') {
+                recurrence = { type: 'monthly', interval: 1 };
+            } else if (values.recurrencePreset === 'custom') {
+                recurrence = {
+                    type: values.customType,
+                    interval: values.customInterval,
+                };
+                // Add days_of_week only for weekly custom recurrence
+                if (values.customType === 'weekly' && values.customDaysOfWeek.length > 0) {
+                    recurrence.days_of_week = values.customDaysOfWeek;
+                }
+            }
+
             const taskData: TaskData = {
                 title: values.title,
                 project_id: TEST_PROJECT_ID,
@@ -116,6 +181,7 @@ export function TaskFormModal({ opened, onClose, task, onUnschedule }: TaskFormM
                 importance: parseInt(values.importance),
                 planned_start: values.planned_start ? dayjs(values.planned_start).toISOString() : null,
                 planned_end: values.planned_end ? dayjs(values.planned_end).toISOString() : null,
+                recurrence,
             };
 
             if (task) {
@@ -308,6 +374,81 @@ export function TaskFormModal({ opened, onClose, task, onUnschedule }: TaskFormM
                             />
                         </Stack>
                     </SimpleGrid>
+
+                    <Divider my="md" />
+
+                    {/* Recurrence Settings */}
+                    <Stack gap="md">
+                        <Text size="sm" fw={500} c="dimmed" display="flex" style={{ gap: '6px', alignItems: 'center' }}>
+                            <Repeat size={16} /> 繰り返し
+                        </Text>
+
+                        <Select
+                            placeholder="繰り返しパターンを選択"
+                            data={[
+                                { value: 'none', label: 'なし' },
+                                { value: 'daily', label: '毎日' },
+                                { value: 'weekdays', label: '平日 (月〜金)' },
+                                { value: 'weekly', label: '毎週' },
+                                { value: 'monthly', label: '毎月' },
+                                { value: 'custom', label: 'カスタム...' },
+                            ]}
+                            {...form.getInputProps('recurrencePreset')}
+                            onChange={(value) => {
+                                form.setFieldValue('recurrencePreset', value || 'none');
+                                setShowCustomRecurrence(value === 'custom');
+                            }}
+                            size="sm"
+                        />
+
+                        <Collapse in={showCustomRecurrence}>
+                            <Stack gap="md" p="md" style={{ backgroundColor: 'var(--mantine-color-dark-6)', borderRadius: '8px' }}>
+                                <Group grow>
+                                    <NumberInput
+                                        label="間隔"
+                                        placeholder="1"
+                                        min={1}
+                                        max={100}
+                                        {...form.getInputProps('customInterval')}
+                                        size="sm"
+                                    />
+                                    <Select
+                                        label="単位"
+                                        data={[
+                                            { value: 'daily', label: '日' },
+                                            { value: 'weekly', label: '週' },
+                                            { value: 'monthly', label: '月' },
+                                        ]}
+                                        {...form.getInputProps('customType')}
+                                        size="sm"
+                                    />
+                                </Group>
+
+                                {form.values.customType === 'weekly' && (
+                                    <div>
+                                        <Text size="sm" fw={500} mb="xs">曜日を選択</Text>
+                                        <Chip.Group
+                                            multiple
+                                            value={form.values.customDaysOfWeek.map(String)}
+                                            onChange={(values) => {
+                                                form.setFieldValue('customDaysOfWeek', values.map(Number));
+                                            }}
+                                        >
+                                            <Group gap="xs">
+                                                <Chip value="0" size="xs">日</Chip>
+                                                <Chip value="1" size="xs">月</Chip>
+                                                <Chip value="2" size="xs">火</Chip>
+                                                <Chip value="3" size="xs">水</Chip>
+                                                <Chip value="4" size="xs">木</Chip>
+                                                <Chip value="5" size="xs">金</Chip>
+                                                <Chip value="6" size="xs">土</Chip>
+                                            </Group>
+                                        </Chip.Group>
+                                    </div>
+                                )}
+                            </Stack>
+                        </Collapse>
+                    </Stack>
 
                     <Divider />
 

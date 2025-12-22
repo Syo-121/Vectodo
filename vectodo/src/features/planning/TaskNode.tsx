@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { Handle, Position, type NodeProps } from 'reactflow';
-import { Paper, Text, Badge, Group, Stack, useMantineColorScheme, ThemeIcon } from '@mantine/core';
-import { Calendar, AlertCircle } from 'lucide-react';
+import { Paper, Text, Badge, Group, Stack, useMantineColorScheme, ThemeIcon, Tooltip } from '@mantine/core';
+import { Calendar, AlertCircle, Repeat } from 'lucide-react';
 import dayjs from 'dayjs';
 import { getStatusConfig } from '../../utils/taskUtils';
 import { calculateUrgencyFromDeadline } from '../../utils/urgency';
@@ -12,6 +12,7 @@ interface TaskNodeData {
     importance?: number | null;
     deadline?: string | null;
     estimate_minutes?: number | null;
+    recurrence?: any;
 }
 
 export const TaskNode = memo(({ data, selected }: NodeProps<TaskNodeData>) => {
@@ -102,20 +103,30 @@ export const TaskNode = memo(({ data, selected }: NodeProps<TaskNodeData>) => {
                             {statusConfig.label}
                         </Badge>
 
-                        {/* Deadline (icon + text) */}
-                        {deadlineText && (
+                        {/* Deadline (icon + text) + Recurrence */}
+                        {(deadlineText || data.recurrence) && (
                             <Group gap={2} align="center">
-                                {isOverdue && <AlertCircle size={10} color="var(--mantine-color-red-6)" />}
-                                <ThemeIcon variant="transparent" size="xs" color={isOverdue ? 'red' : 'dimmed'}>
-                                    <Calendar size={12} />
-                                </ThemeIcon>
-                                <Text
-                                    size="xs"
-                                    c={isOverdue ? 'red' : 'dimmed'}
-                                    fw={isOverdue ? 700 : 500}
-                                >
-                                    {deadlineText}
-                                </Text>
+                                {deadlineText && (
+                                    <>
+                                        {isOverdue && <AlertCircle size={10} color="var(--mantine-color-red-6)" />}
+                                        <ThemeIcon variant="transparent" size="xs" color={isOverdue ? 'red' : 'dimmed'}>
+                                            <Calendar size={12} />
+                                        </ThemeIcon>
+                                        <Text
+                                            size="xs"
+                                            c={isOverdue ? 'red' : 'dimmed'}
+                                            fw={isOverdue ? 700 : 500}
+                                        >
+                                            {deadlineText}
+                                        </Text>
+                                    </>
+                                )}
+                                {/* Recurrence indicator */}
+                                {data.recurrence && (
+                                    <Tooltip label="繰り返しタスク">
+                                        <Repeat size={12} color="var(--mantine-color-blue-6)" style={{ flexShrink: 0 }} />
+                                    </Tooltip>
+                                )}
                             </Group>
                         )}
                     </Group>

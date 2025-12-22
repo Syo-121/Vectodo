@@ -1,5 +1,5 @@
-import { Card, Text, Badge, Group, Stack, Checkbox, ActionIcon, Menu } from '@mantine/core';
-import { Clock, AlertCircle, Play, Circle, Edit, Folder } from 'lucide-react';
+import { Card, Text, Badge, Group, Stack, Checkbox, ActionIcon, Menu, Tooltip } from '@mantine/core';
+import { Clock, AlertCircle, Play, Circle, Edit, Folder, Repeat } from 'lucide-react';
 import { useTaskStore } from '../stores/taskStore';
 import type { Tables } from '../supabase-types';
 
@@ -128,6 +128,12 @@ export function TaskCard({ task, onEdit }: TaskCardProps) {
                                 <Text fw={500} size="lg" td={isDone ? 'line-through' : 'none'}>
                                     {task.title}
                                 </Text>
+                                {/* Recurrence indicator */}
+                                {task.recurrence && (
+                                    <Tooltip label="繰り返しタスク">
+                                        <Repeat size={16} color="var(--mantine-color-blue-6)" />
+                                    </Tooltip>
+                                )}
                                 {/* Subtask count badge */}
                                 {subtaskCount > 0 && (
                                     <Badge
