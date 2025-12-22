@@ -1,5 +1,5 @@
-import { Card, Text, Badge, Stack, Group, useMantineColorScheme, useMantineTheme, ActionIcon, Menu } from '@mantine/core';
-import { Clock, CheckCircle, Pencil, Zap, Flame, ArrowUp, ArrowRight, ArrowDown } from 'lucide-react';
+import { Card, Text, Badge, Stack, Group, useMantineColorScheme, useMantineTheme, ActionIcon, Menu, Tooltip } from '@mantine/core';
+import { Clock, CheckCircle, Pencil, Zap, Flame, ArrowUp, ArrowRight, ArrowDown, Repeat } from 'lucide-react';
 import type { Tables } from '../../supabase-types';
 import { useTaskStore } from '../../stores/taskStore';
 import { getImportanceConfig } from '../../utils/taskUtils';
@@ -59,9 +59,17 @@ export function KanbanCard({ task, onDrillDown, onEdit }: KanbanCardProps) {
             <Stack gap="xs">
                 {/* Title with Edit Button */}
                 <Group justify="space-between" align="flex-start" wrap="nowrap">
-                    <Text fw={600} size="sm" lineClamp={2} style={{ flex: 1 }}>
-                        {task.title}
-                    </Text>
+                    <Group gap="xs" style={{ flex: 1, minWidth: 0 }}>
+                        <Text fw={600} size="sm" lineClamp={2} style={{ flex: 1 }}>
+                            {task.title}
+                        </Text>
+                        {/* Recurrence indicator */}
+                        {task.recurrence && (
+                            <Tooltip label="繰り返しタスク">
+                                <Repeat size={14} color="var(--mantine-color-blue-6)" style={{ flexShrink: 0 }} />
+                            </Tooltip>
+                        )}
+                    </Group>
                     <ActionIcon
                         size="sm"
                         variant="subtle"
