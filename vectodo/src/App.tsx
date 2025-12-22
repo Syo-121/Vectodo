@@ -28,20 +28,36 @@ function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Authentication state management
+  // Authentication state management with OAuth redirect detection
   useEffect(() => {
+    // Check if we're in the middle of an OAuth redirect
+    const isRedirecting = window.location.hash.includes('access_token');
+
+    console.log('[Auth] Initializing auth, isRedirecting:', isRedirecting);
+
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       console.log('[Auth] Initial session:', session ? 'logged in' : 'not logged in');
       setSession(session);
-      setLoading(false);
+
+      // Only clear loading if we're not in the middle of a redirect
+      // If redirecting, wait for onAuthStateChange to handle it
+      if (!isRedirecting) {
+        console.log('[Auth] Not redirecting, clearing loading state');
+        setLoading(false);
+      } else {
+        console.log('[Auth] OAuth redirect detected, waiting for auth state change...');
+      }
     });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       console.log('[Auth] Auth state changed:', _event, session ? 'logged in' : 'not logged in');
       setSession(session);
-      setLoading(false); // Clear loading state after auth state change (e.g., OAuth redirect)
+
+      // Always clear loading state when auth state changes
+      // This handles OAuth redirect completion
+      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
