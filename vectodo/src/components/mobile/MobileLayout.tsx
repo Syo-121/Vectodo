@@ -1,25 +1,15 @@
 import { useState } from 'react';
-import { AppShell, Stack, Text, Button, Tabs, ActionIcon, Group, Title } from '@mantine/core';
-import { Home, GitMerge, List, Settings, Plus, CheckSquare, LogOut } from 'lucide-react';
-import { supabase } from '../../lib/supabaseClient';
+import { AppShell, Stack, Tabs, ActionIcon, Group, Title } from '@mantine/core';
+import { Home, GitMerge, List, Settings, Plus, CheckSquare } from 'lucide-react';
 import { useToastStore } from '../../stores/useToastStore';
 import { MobileHome } from './MobileHome';
 import { MobileFlow } from './MobileFlow';
 import { MobileList } from './MobileList';
+import { MobileSettings } from './MobileSettings';
 
 export function MobileLayout() {
     const [activeTab, setActiveTab] = useState<string>('home');
     const addToast = useToastStore(state => state.addToast);
-
-    const handleLogout = async () => {
-        try {
-            await supabase.auth.signOut();
-            addToast('ログアウトしました', 'success');
-        } catch (error) {
-            console.error('Logout failed:', error);
-            addToast('ログアウトに失敗しました', 'error');
-        }
-    };
 
     const handleFabClick = () => {
         // TODO: Open task creation modal
@@ -58,22 +48,7 @@ export function MobileLayout() {
                     )}
 
                     {activeTab === 'settings' && (
-                        <Stack gap="md">
-                            <Text size="xl" fw={600}>設定画面</Text>
-                            <Text c="dimmed" mb="md">
-                                アプリの設定やアカウント管理を行います。
-                            </Text>
-
-                            <Button
-                                leftSection={<LogOut size={16} />}
-                                onClick={handleLogout}
-                                color="red"
-                                variant="light"
-                                fullWidth
-                            >
-                                ログアウト
-                            </Button>
-                        </Stack>
+                        <MobileSettings />
                     )}
                 </Stack>
 
