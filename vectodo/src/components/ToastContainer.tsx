@@ -1,18 +1,20 @@
 import { useEffect, useRef } from 'react';
 import { notifications } from '@mantine/notifications';
 import { useToastStore } from '../stores/useToastStore';
-import { IconCheck, IconX, IconInfoCircle } from '@tabler/icons-react';
+import { IconCheck, IconX, IconInfoCircle, IconAlertTriangle } from '@tabler/icons-react';
 
 const toastIcons = {
     success: IconCheck,
     error: IconX,
     info: IconInfoCircle,
+    warning: IconAlertTriangle,
 };
 
 const toastColors = {
     success: 'green',
     error: 'red',
     info: 'blue',
+    warning: 'yellow',
 };
 
 export function ToastContainer() {
@@ -37,7 +39,10 @@ export function ToastContainer() {
 
             notifications.show({
                 id: toast.id,
-                title: toast.type === 'success' ? '成功' : toast.type === 'error' ? 'エラー' : '情報',
+                title: toast.type === 'success' ? '成功'
+                    : toast.type === 'error' ? 'エラー'
+                        : toast.type === 'warning' ? '警告'
+                            : '情報',
                 message: toast.message,
                 color: toastColors[toast.type],
                 icon: <Icon size={18} />,
