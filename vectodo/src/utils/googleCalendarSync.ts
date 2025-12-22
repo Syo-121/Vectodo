@@ -41,11 +41,22 @@ function convertTaskToGoogleEvent(task: Task) {
         throw new Error('No date information available');
     }
 
+    const signature = '\n\n[Created by Vectodo]';
+    const description = task.description
+        ? `${task.description}${signature}`
+        : '[Created by Vectodo]';
+
     return {
         summary: task.title,
-        description: task.description || undefined,
+        description,
         start,
         end,
+        extendedProperties: {
+            private: {
+                createdBy: 'vectodo',
+                vectodoTaskId: task.id,
+            }
+        }
     };
 }
 
@@ -233,6 +244,40 @@ export async function deleteGoogleEvent(
     }
 
     try {
+        // SAFETY CHECK: Verify event before deletion
+        console.log('🔍 [Google Sync] Verifying event origin before deletion...');
+        const getResponse = await fetch(
+            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${googleEventId}`,
+            {
+                headers: {
+                    Authorization: `Bearer ${session.provider_token}`,
+                },
+            }
+        );
+
+        if (!getResponse.ok) {
+            if (getResponse.status === 404) {
+                console.log('ℹ️ [Google Sync] Event already deleted (404)');
+                return true;
+            }
+            throw new Error(`Failed to verify event: ${getResponse.status}`);
+        }
+
+        const event = await getResponse.json();
+
+        // Check if event was created by Vectodo
+        const isVectodoEvent = event.description?.includes('[Created by Vectodo]') ||
+            event.extendedProperties?.private?.createdBy === 'vectodo';
+
+        if (!isVectodoEvent) {
+            console.error('🚫 [Google Sync] SAFETY: Refusing to delete non-Vectodo event');
+            console.error('   Event title:', event.summary);
+            console.error('   Event ID:', event.id);
+            throw new Error('Cannot delete events not created by Vectodo (Signature missing)');
+        }
+
+        console.log('✅ [Google Sync] Safety check passed. Deleting event...');
+
         const response = await fetch(
             `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${googleEventId}`,
             {
@@ -263,6 +308,7 @@ export async function deleteGoogleEvent(
         if (err instanceof Error) {
             console.error('   Error message:', err.message);
         }
-        return false;
+        // Rethrow the error so the UI knows it failed
+        throw err;
     }
 }
