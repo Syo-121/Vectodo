@@ -34,9 +34,10 @@ interface TaskFormModalProps {
     onClose: () => void;
     task?: Task | null;
     onUnschedule?: () => void;
+    initialParentId?: string | null;
 }
 
-export function TaskFormModal({ opened, onClose, task, onUnschedule }: TaskFormModalProps) {
+export function TaskFormModal({ opened, onClose, task, onUnschedule, initialParentId }: TaskFormModalProps) {
     const { addTask, updateTask, deleteTask, loading, tasks, updateTaskStatus } = useTaskStore();
 
     // Helper function to get all descendants of a task (recursive)
@@ -136,7 +137,7 @@ export function TaskFormModal({ opened, onClose, task, onUnschedule }: TaskFormM
                 status: task?.status || 'TODO',
                 planned_start: task?.planned_start ? new Date(task.planned_start) : null,
                 planned_end: task?.planned_end ? new Date(task.planned_end) : null,
-                parent_id: task?.parent_id || '',
+                parent_id: task?.parent_id || initialParentId || '', // Use initialParentId if creating new task
                 recurrencePreset: preset,
                 customInterval,
                 customType,
@@ -144,7 +145,7 @@ export function TaskFormModal({ opened, onClose, task, onUnschedule }: TaskFormM
             });
             setShowCustomRecurrence(preset === 'custom');
         }
-    }, [task, opened]);
+    }, [task, opened, initialParentId]);
 
     const handleSubmit = async (values: typeof form.values) => {
         try {

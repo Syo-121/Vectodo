@@ -1,28 +1,24 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import {
     Paper, Text, Badge, Group, Stack, Box, Drawer,
-    TextInput, Textarea, Select, MultiSelect, Button, Slider
+    TextInput, Textarea, Select, Button, Slider, ActionIcon, Center
 } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
 import { Calendar } from 'lucide-react';
-import dayjs from 'dayjs';
+import { useTaskStore } from '../../stores/taskStore';
+import { getStatusConfig, getImportanceConfig } from '../../utils/taskUtils';
+import type { Tables } from '../../supabase-types';
+import { IconFolder, IconPencil } from '@tabler/icons-react';
 
-// --- Types ---
+type Task = Tables<'tasks'>;
 
-interface TaskNode {
-    id: string;
-    title: string;
-    description?: string;
-    status: 'TODO' | 'DOING' | 'DONE';
-    importance: 'high' | 'medium' | 'low';
-    deadline?: Date | null;
-    startDate?: Date | null;
-    estimate_minutes?: number | null;
-    dependencies: string[];
+export interface MobileFlowProps {
+    currentViewId: string | null;
+    setCurrentViewId: (id: string | null) => void;
 }
 
 interface LayoutNode {
-    task: TaskNode;
+    task: Task;
     x: number;
     y: number;
     width: number;
@@ -30,153 +26,30 @@ interface LayoutNode {
     level: number;
 }
 
-// --- Mock Data ---
-
-const initialTasks: TaskNode[] = [
-    // Level 0
-    {
-        id: 'root',
-        title: 'Project Alpha Kickoff',
-        description: 'プロジェクトの全体像を確認し、チームのアサインを完了する',
-        status: 'DONE',
-        importance: 'high',
-        deadline: new Date('2025-11-01T10:00:00'),
-        dependencies: [],
-    },
-    // Level 1
-    {
-        id: 'req_def',
-        title: '要件定義完了',
-        description: 'クライアント要望をドキュメント化',
-        status: 'DONE',
-        importance: 'high',
-        deadline: new Date('2025-11-05T18:00:00'),
-        dependencies: ['root'],
-    },
-    {
-        id: 'market_res',
-        title: '市場調査',
-        description: '競合アプリの分析と差別化ポイントの明確化',
-        status: 'DONE',
-        importance: 'medium',
-        deadline: new Date('2025-11-04T18:00:00'),
-        dependencies: ['root'],
-    },
-    // Level 2 (Wide - Branching)
-    {
-        id: 'design_ui',
-        title: 'UI/UXデザイン',
-        description: 'Figmaでプロトタイプ作成',
-        status: 'DONE',
-        importance: 'high',
-        deadline: new Date('2025-11-15T18:00:00'),
-        dependencies: ['req_def'],
-    },
-    {
-        id: 'design_db',
-        title: 'DBスキーマ設計',
-        description: 'ER図の作成と正規化',
-        status: 'DONE',
-        importance: 'high',
-        deadline: new Date('2025-11-12T18:00:00'),
-        dependencies: ['req_def'],
-    },
-    {
-        id: 'tech_select',
-        title: '技術選定',
-        description: 'フレームワークとインフラ構成の決定',
-        status: 'DONE',
-        importance: 'medium',
-        deadline: new Date('2025-11-10T18:00:00'),
-        dependencies: ['req_def'],
-    },
-    // Level 3 (Wider - Testing Horizontal Scroll)
-    {
-        id: 'impl_fe_1',
-        title: 'FE: 認証機能',
-        description: 'ログイン、サインアップ、パスワードリセット',
-        status: 'DOING',
-        importance: 'high',
-        deadline: new Date('2025-11-20T18:00:00'),
-        dependencies: ['design_ui', 'tech_select'],
-    },
-    {
-        id: 'impl_fe_2',
-        title: 'FE: ダッシュボード',
-        description: 'メイン画面の実装',
-        status: 'TODO',
-        importance: 'medium',
-        deadline: new Date('2025-11-25T18:00:00'),
-        dependencies: ['design_ui'],
-    },
-    {
-        id: 'impl_be_1',
-        title: 'BE: API実装 Phase 1',
-        description: 'ユーザーCRUDと認証API',
-        status: 'DOING',
-        importance: 'high',
-        deadline: new Date('2025-11-18T18:00:00'),
-        dependencies: ['design_db', 'tech_select'],
-    },
-    {
-        id: 'impl_infra',
-        title: 'AWS環境構築',
-        description: 'VPC, ECS, RDSのTerraform化',
-        status: 'DOING',
-        importance: 'high',
-        deadline: new Date('2025-11-15T18:00:00'),
-        dependencies: ['tech_select'],
-    },
-    // Level 4 (Merging)
-    {
-        id: 'test_integ',
-        title: '結合テスト',
-        description: 'FEとBEを繋ぎこんで動作確認',
-        status: 'TODO',
-        importance: 'high',
-        deadline: new Date('2025-12-05T18:00:00'),
-        dependencies: ['impl_fe_1', 'impl_fe_2', 'impl_be_1', 'impl_infra'],
-    },
-    // Level 5
-    {
-        id: 'release',
-        title: 'v1.0 リリース',
-        description: '本番環境へのデプロイ',
-        status: 'TODO',
-        importance: 'high',
-        deadline: new Date('2025-12-10T18:00:00'),
-        dependencies: ['test_integ'],
-    },
-];
-
 // --- Constants ---
-
 const CARD_WIDTH = 150;
-const CARD_HEIGHT = 90; // 少し高さを確保
+const CARD_HEIGHT = 100;
 const GAP_X = 30;
 const GAP_Y = 80;
 const PADDING = 50;
 
-// --- Helper Components & Functions ---
+export function MobileFlow({ currentViewId, setCurrentViewId }: MobileFlowProps) {
+    // --- Store & State ---
+    const {
+        tasks,
+        dependencies, // Fetch dependencies separately
+        updateTask,
+        fetchDependencies
+    } = useTaskStore();
 
-const getStatusColor = (status: string) => {
-    switch (status) {
-        case 'TODO': return 'gray';
-        case 'DOING': return 'blue';
-        case 'DONE': return 'green';
-        default: return 'gray';
-    }
-};
-
-
-
-export function MobileFlow() {
-    // --- State ---
-    const [tasks, setTasks] = useState<TaskNode[]>(initialTasks);
+    useEffect(() => {
+        // Ensure dependencies are loaded
+        fetchDependencies();
+    }, [fetchDependencies]);
 
     // Canvas State
     const [offset, setOffset] = useState({ x: 0, y: 0 });
-    const [scale, setScale] = useState(0.8); // Initial scale check
+    const [scale, setScale] = useState(0.8);
     const [isDragging, setIsDragging] = useState(false);
     const dragStartRef = useRef<{ x: number, y: number } | null>(null);
     const lastOffsetRef = useRef<{ x: number, y: number }>({ x: 0, y: 0 });
@@ -184,14 +57,38 @@ export function MobileFlow() {
 
     // Drawer State
     const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
-    const [editForm, setEditForm] = useState<TaskNode | null>(null);
+    const [editForm, setEditForm] = useState<Task | null>(null);
+
+    // --- Derived Data (Filtered for Hierarchy) ---
+    const visibleTasks = useMemo(() => {
+        return tasks.filter(task => {
+            if (currentViewId) return task.parent_id === currentViewId;
+            return task.parent_id === null;
+        });
+    }, [tasks, currentViewId]);
+
+    // Helper to find predecessors for a task
+    const getPredecessors = useMemo(() => {
+        // Create a map for fast lookup: successor_id -> predecessor_ids[]
+        const map = new Map<string, string[]>();
+        if (dependencies) {
+            dependencies.forEach(d => {
+                if (!map.has(d.successor_id)) map.set(d.successor_id, []);
+                map.get(d.successor_id)?.push(d.predecessor_id);
+            });
+        }
+        return (taskId: string) => map.get(taskId) || [];
+    }, [dependencies]);
 
     // --- Layout Calculation ---
     const layout = useMemo(() => {
-        const nodeMap = new Map<string, TaskNode>();
-        tasks.forEach(t => nodeMap.set(t.id, t));
+        if (visibleTasks.length === 0) return { nodes: [], edges: [], width: 0, height: 0 };
 
-        // Calculate levels
+        const nodeMap = new Map<string, Task>();
+        visibleTasks.forEach(t => nodeMap.set(t.id, t));
+        const visibleIds = new Set(visibleTasks.map(t => t.id));
+
+        // Calculate levels (Local graph only)
         const levels = new Map<string, number>();
         const calcLevel = (id: string, visited = new Set<string>()): number => {
             if (visited.has(id)) return 0; // Cycle detection
@@ -199,23 +96,29 @@ export function MobileFlow() {
 
             visited.add(id);
             const task = nodeMap.get(id);
-            if (!task || task.dependencies.length === 0) {
+            if (!task) return 0;
+
+            const preds = getPredecessors(id);
+            // Only consider dependencies that are ALSO in the current view
+            const localDependencies = preds.filter(depId => visibleIds.has(depId));
+
+            if (localDependencies.length === 0) {
                 levels.set(id, 0);
                 return 0;
             }
 
-            const maxParentLevel = Math.max(...task.dependencies.map(dep => calcLevel(dep, visited)));
+            const maxParentLevel = Math.max(...localDependencies.map(dep => calcLevel(dep, visited)));
             const level = maxParentLevel + 1;
             levels.set(id, level);
             return level;
         };
 
-        tasks.forEach(t => calcLevel(t.id));
+        visibleTasks.forEach(t => calcLevel(t.id));
 
         // Group by level
-        const nodesByLevel: Record<number, TaskNode[]> = {};
+        const nodesByLevel: Record<number, Task[]> = {};
         let maxLevel = 0;
-        tasks.forEach(t => {
+        visibleTasks.forEach(t => {
             const lvl = levels.get(t.id) || 0;
             if (!nodesByLevel[lvl]) nodesByLevel[lvl] = [];
             nodesByLevel[lvl].push(t);
@@ -261,9 +164,12 @@ export function MobileFlow() {
             });
         });
 
-        // Create Edges
+        // Create Edges (Local graph only)
         layoutNodes.forEach(node => {
-            node.task.dependencies.forEach(depId => {
+            const preds = getPredecessors(node.task.id);
+            const localDependencies = preds.filter(depId => visibleIds.has(depId));
+
+            localDependencies.forEach(depId => {
                 const parent = nodePositionMap.get(depId);
                 if (parent) {
                     edges.push({ from: parent, to: node });
@@ -271,11 +177,15 @@ export function MobileFlow() {
             });
         });
 
-        return { nodes: layoutNodes, edges, width: maxRowWidth + PADDING * 2, height: (maxLevel + 1) * (CARD_HEIGHT + GAP_Y) + PADDING * 2 };
-    }, [tasks]);
+        return {
+            nodes: layoutNodes,
+            edges,
+            width: maxRowWidth + PADDING * 2,
+            height: (maxLevel + 1) * (CARD_HEIGHT + GAP_Y) + PADDING * 2
+        };
+    }, [visibleTasks, getPredecessors]);
 
     // --- Event Handlers ---
-
     const handlePointerDown = (e: React.PointerEvent) => {
         setIsDragging(true);
         dragStartRef.current = { x: e.clientX, y: e.clientY };
@@ -306,19 +216,40 @@ export function MobileFlow() {
         e.currentTarget.releasePointerCapture(e.pointerId);
     };
 
-    const handleCardClick = (task: TaskNode) => {
-        if (hasMovedRef.current) return; // Prevent click after drag
-        setEditForm({ ...task }); // Clone for editing
+    const handleCardClick = (task: Task) => {
+        if (hasMovedRef.current) return;
+        setCurrentViewId(task.id);
+    };
+
+    const handleEditClick = (e: React.MouseEvent, task: Task) => {
+        e.stopPropagation();
+        setEditForm({ ...task });
         setActiveTaskId(task.id);
     };
 
-    const handleSave = () => {
-        if (!editForm) return;
-        setTasks(prev => prev.map(t => t.id === editForm.id ? editForm : t));
-        setActiveTaskId(null);
-    };
+    const handleSave = async () => {
+        if (!editForm || !editForm.id) return;
 
-    // --- Drawing Helpers ---
+        try {
+            await updateTask(editForm.id, {
+                title: editForm.title,
+                description: editForm.description,
+                importance: editForm.importance,
+                deadline: editForm.deadline,
+            });
+
+            // Check status change
+            const originalTask = tasks.find(t => t.id === editForm.id);
+            if (originalTask && editForm.status && originalTask.status !== editForm.status) {
+                await useTaskStore.getState().updateTaskStatus(editForm.id, editForm.status);
+            }
+
+            setActiveTaskId(null);
+            setEditForm(null);
+        } catch (error) {
+            console.error('Failed to update task:', error);
+        }
+    };
 
     const createPath = (from: LayoutNode, to: LayoutNode) => {
         const fromX = from.x + from.width / 2;
@@ -327,7 +258,6 @@ export function MobileFlow() {
         const toY = to.y;
 
         const midY = (fromY + toY) / 2;
-        // Bezier curve
         return `M ${fromX} ${fromY} C ${fromX} ${midY}, ${toX} ${midY}, ${toX} ${toY}`;
     };
 
@@ -335,18 +265,18 @@ export function MobileFlow() {
         <Box
             style={{
                 width: '100%',
-                height: 'calc(100vh - 130px)', // Header 60px + Footer 70px
+                height: 'calc(100vh - 130px)',
                 overflow: 'hidden',
                 position: 'relative',
-                backgroundColor: '#1A1B1E', // Dark 7
+                backgroundColor: '#1A1B1E',
                 cursor: isDragging ? 'grabbing' : 'grab',
                 userSelect: 'none',
-                touchAction: 'none' // Prevent default touch actions like scroll
+                touchAction: 'none'
             }}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
-            onPointerLeave={handlePointerUp} // Safety net
+            onPointerLeave={handlePointerUp}
             onWheel={(e) => {
                 if (e.ctrlKey || e.metaKey) {
                     e.preventDefault();
@@ -355,7 +285,6 @@ export function MobileFlow() {
                 }
             }}
         >
-            {/* Background Grid Pattern */}
             <div
                 style={{
                     position: 'absolute',
@@ -367,21 +296,24 @@ export function MobileFlow() {
                 }}
             />
 
-            {/* Content Container */}
+            {visibleTasks.length === 0 && (
+                <Center h="100%" style={{ pointerEvents: 'none' }}>
+                    <Text c="dimmed">タスクがありません</Text>
+                </Center>
+            )}
+
             <div style={{
                 transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
                 transformOrigin: '0 0',
                 width: '100%',
                 height: '100%'
             }}>
-
-                {/* SVG Layer */}
                 <svg
                     style={{
                         position: 'absolute',
                         top: 0,
                         left: 0,
-                        width: Math.max(layout.width, 2000), // Ensure large enough
+                        width: Math.max(layout.width, 2000),
                         height: Math.max(layout.height, 2000),
                         pointerEvents: 'none',
                         zIndex: 1
@@ -403,71 +335,64 @@ export function MobileFlow() {
                         <path
                             key={i}
                             d={createPath(edge.from, edge.to)}
-                            stroke="#adb5bd"
-                            strokeWidth="2"
                             fill="none"
+                            stroke="#5c5f66"
+                            strokeWidth="2"
                             markerEnd="url(#flow-arrow)"
                         />
                     ))}
                 </svg>
 
-                {/* Nodes Layer */}
                 {layout.nodes.map(node => {
-                    const statusColor = getStatusColor(node.task.status);
-                    const deadlineText = node.task.deadline ? dayjs(node.task.deadline).format('M/D') : null;
-                    const isOverdue = node.task.deadline && dayjs().isAfter(node.task.deadline);
+                    const statusConfig = getStatusConfig(node.task.status || 'todo');
+                    const importanceConfig = getImportanceConfig(node.task.importance || 0);
 
                     return (
                         <Paper
                             key={node.task.id}
                             shadow="sm"
-                            withBorder
                             p="xs"
                             radius="md"
-                            onClick={(e) => {
-                                e.stopPropagation(); // Prevent drag start logic if needed, but here we handled via hasMoved
-                                handleCardClick(node.task);
-                            }}
+                            withBorder
+                            onClick={() => handleCardClick(node.task)}
                             style={{
                                 position: 'absolute',
                                 left: node.x,
                                 top: node.y,
                                 width: node.width,
                                 height: node.height,
-                                borderLeft: `5px solid var(--mantine-color-${statusColor}-filled)`,
-                                zIndex: 10,
                                 cursor: 'pointer',
-                                transition: 'transform 0.1s, box-shadow 0.1s',
-                                backgroundColor: '#25262B', // Dark 6
-                                color: '#C1C2C5',
+                                zIndex: 2,
+                                backgroundColor: '#25262B',
+                                borderColor: statusConfig.color,
+                                borderWidth: '1px'
                             }}
                         >
-                            <Stack gap={4} h="100%" justify="space-between">
-                                <Text size="xs" fw={700} lineClamp={2} lh={1.3} c="#C1C2C5">
-                                    {node.task.title}
-                                </Text>
-
-                                <Group justify="space-between" align="end" gap={0}>
-                                    <Badge
-                                        color={getStatusColor(node.task.status)}
-                                        variant="light"
+                            <Stack gap={4} h="100%">
+                                <Group wrap="nowrap" align="start" justify="space-between" gap={4}>
+                                    <Group gap={4} wrap="nowrap" style={{ flex: 1, overflow: 'hidden' }}>
+                                        <IconFolder size={14} color="#FAB005" style={{ flexShrink: 0 }} />
+                                        <Text size="xs" fw={700} lineClamp={2} c="#C1C2C5" lh={1.2}>
+                                            {node.task.title}
+                                        </Text>
+                                    </Group>
+                                    <ActionIcon
                                         size="xs"
-                                        radius="sm"
-                                        px={4}
-                                        h={18}
-                                        style={{ fontSize: '10px' }}
+                                        variant="subtle"
+                                        color="gray"
+                                        onClick={(e) => handleEditClick(e, node.task)}
                                     >
-                                        {node.task.status}
-                                    </Badge>
+                                        <IconPencil size={12} />
+                                    </ActionIcon>
+                                </Group>
 
-                                    {deadlineText && (
-                                        <Group gap={2}>
-                                            <Calendar size={10} color={isOverdue ? 'red' : 'gray'} />
-                                            <Text size="xs" c={isOverdue ? 'red' : 'dimmed'} style={{ fontSize: '10px' }} fw={700}>
-                                                {deadlineText}
-                                            </Text>
-                                        </Group>
-                                    )}
+                                <Group gap={4} mt="auto">
+                                    <Badge size="xs" color={statusConfig.color} variant="dot">
+                                        {statusConfig.label}
+                                    </Badge>
+                                    <Badge size="xs" color={importanceConfig.color} variant="outline">
+                                        {importanceConfig.label}
+                                    </Badge>
                                 </Group>
                             </Stack>
                         </Paper>
@@ -475,113 +400,110 @@ export function MobileFlow() {
                 })}
             </div>
 
-            {/* Zoom Control */}
-            <Paper
-                shadow="md"
-                p="xs"
-                style={{
-                    position: 'absolute',
-                    bottom: 20,
-                    left: 20,
-                    zIndex: 100,
-                    width: 150,
-                    opacity: 0.9,
-                    backgroundColor: '#25262B',
-                    color: '#C1C2C5',
-                    border: '1px solid #373A40'
-                }}
-            >
-                <Text size="xs" mb={4} fw={500} c="#C1C2C5">Zoom: {Math.round(scale * 100)}%</Text>
-                <Slider
-                    value={scale}
-                    onChange={setScale}
-                    min={0.1}
-                    max={1.5}
-                    step={0.1}
-                    size="sm"
-                    label={null}
-                />
-            </Paper>
-
-            {/* Edit Drawer */}
             <Drawer
                 opened={!!activeTaskId}
-                onClose={() => setActiveTaskId(null)}
+                onClose={() => {
+                    setActiveTaskId(null);
+                    setEditForm(null);
+                }}
                 position="bottom"
                 size="90%"
-                title={<Text fw={700}>タスク編集</Text>}
+                title={<Text fw={700} c="#C1C2C5">タスク編集</Text>}
                 padding="md"
                 zIndex={2000}
+                styles={{
+                    content: { backgroundColor: '#1A1B1E', color: '#C1C2C5' },
+                    header: { backgroundColor: '#1A1B1E', color: '#C1C2C5' }
+                }}
             >
                 {editForm && (
                     <Stack gap="md" pb={50}>
                         <TextInput
                             label="タイトル"
-                            placeholder="タスク名を入力"
                             value={editForm.title}
                             onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                            required
+                            styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#C1C2C5' }, label: { color: '#C1C2C5' } }}
                         />
 
                         <Textarea
                             label="詳細"
-                            placeholder="詳細説明..."
                             value={editForm.description || ''}
                             onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
                             minRows={2}
+                            styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#C1C2C5' }, label: { color: '#C1C2C5' } }}
                         />
 
                         <Group grow>
                             <Select
                                 label="ステータス"
-                                value={editForm.status}
+                                value={editForm.status || 'TODO'}
                                 onChange={(val) => val && setEditForm({ ...editForm, status: val as any })}
-                                data={[
-                                    { value: 'TODO', label: 'TODO' },
-                                    { value: 'DOING', label: 'DOING' },
-                                    { value: 'DONE', label: 'DONE' },
-                                ]}
+                                data={['TODO', 'DOING', 'DONE']}
+                                styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#C1C2C5' }, label: { color: '#C1C2C5' } }}
                             />
                             <Select
                                 label="重要度"
-                                value={editForm.importance}
-                                onChange={(val) => val && setEditForm({ ...editForm, importance: val as any })}
+                                value={(editForm.importance || 0) >= 80 ? 'high' : (editForm.importance || 0) >= 50 ? 'medium' : 'low'}
+                                onChange={(val) => {
+                                    let numVal = 50;
+                                    if (val === 'high') numVal = 80;
+                                    if (val === 'medium') numVal = 50;
+                                    if (val === 'low') numVal = 20;
+                                    setEditForm({ ...editForm, importance: numVal });
+                                }}
                                 data={[
-                                    { value: 'high', label: '高' },
-                                    { value: 'medium', label: '中' },
-                                    { value: 'low', label: '低' },
+                                    { value: 'high', label: 'High' },
+                                    { value: 'medium', label: 'Medium' },
+                                    { value: 'low', label: 'Low' }
                                 ]}
+                                styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#C1C2C5' }, label: { color: '#C1C2C5' } }}
                             />
                         </Group>
 
                         <DatePickerInput
                             label="期限"
-                            placeholder="日付を選択"
-                            value={editForm.deadline || null}
-                            onChange={(date) => setEditForm({ ...editForm, deadline: date })}
+                            value={editForm.deadline ? new Date(editForm.deadline) : null}
+                            onChange={(date: Date | null) => setEditForm({ ...editForm, deadline: date ? date.toISOString() : null })}
                             leftSection={<Calendar size={16} />}
                             clearable
+                            styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#C1C2C5' }, label: { color: '#C1C2C5' } }}
                         />
 
-                        <MultiSelect
-                            label="前提タスク (依存関係)"
-                            placeholder="依存するタスクを選択"
-                            data={tasks
-                                .filter(t => t.id !== editForm.id) // Exclude self
-                                .map(t => ({ value: t.id, label: t.title }))
-                            }
-                            value={editForm.dependencies}
-                            onChange={(vals) => setEditForm({ ...editForm, dependencies: vals })}
-                            searchable
-                            clearable
-                        />
-
-                        <Button fullWidth onClick={handleSave} mt="md" size="md">
+                        <Button fullWidth onClick={handleSave} mt="md">
                             保存する
                         </Button>
                     </Stack>
                 )}
             </Drawer>
+
+            <Paper
+                shadow="sm"
+                p="xs"
+                style={{
+                    position: 'absolute',
+                    bottom: 20,
+                    left: 20,
+                    zIndex: 10,
+                    backgroundColor: '#25262B',
+                    border: '1px solid #373A40',
+                    color: '#C1C2C5'
+                }}
+            >
+                <Group gap="xs">
+                    <Text size="xs">Zoom</Text>
+                    <Slider
+                        w={100}
+                        min={0.1}
+                        max={2}
+                        step={0.1}
+                        value={scale}
+                        onChange={setScale}
+                        size="sm"
+                    />
+                    <Text size="xs">{Math.round(scale * 100)}%</Text>
+                </Group>
+            </Paper>
+
         </Box>
     );
 }

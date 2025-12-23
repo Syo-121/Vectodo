@@ -1,18 +1,54 @@
 import { useState, useEffect } from 'react';
-import { AppShell, Stack, Tabs, ActionIcon, Group, Title, Avatar, Menu, Text } from '@mantine/core';
+import { AppShell, Stack, ActionIcon, Group, Title, Avatar, Menu, Text, Breadcrumbs, Anchor, Box } from '@mantine/core';
 import { Home, GitMerge, List, Settings, Plus, CheckSquare, LogOut } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { useToastStore } from '../../stores/useToastStore';
+import { useTaskStore } from '../../stores/taskStore';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { MobileHome } from './MobileHome';
 import { MobileFlow } from './MobileFlow';
 import { MobileList } from './MobileList';
 import { MobileSettings } from './MobileSettings';
+import { TaskFormModal } from '../TaskFormModal';
 
 export function MobileLayout() {
     const [activeTab, setActiveTab] = useState<string>('home');
     const [user, setUser] = useState<SupabaseUser | null>(null);
+    const [currentViewId, setCurrentViewId] = useState<string | null>(null);
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const addToast = useToastStore(state => state.addToast);
+    const { tasks, fetchTasks } = useTaskStore();
+
+    useEffect(() => {
+        fetchTasks();
+    }, [fetchTasks]);
+
+    // Helper to generate breadcrumbs path
+    const getBreadcrumbs = () => {
+        const crumbs = [
+            { title: 'Home', id: null }
+        ];
+
+        if (!currentViewId) return crumbs;
+
+        const path: { title: string, id: string }[] = [];
+        let currentId: string | null = currentViewId;
+
+        while (currentId) {
+            const task = tasks.find(t => t.id === currentId);
+            if (!task) break;
+            path.unshift({ title: task.title, id: task.id });
+            currentId = task.parent_id;
+        }
+
+        return [...crumbs, ...path];
+    };
+
+    const breadcrumbs = getBreadcrumbs().map((item, index) => (
+        <Anchor key={index} size="xs" c="dimmed" onClick={() => setCurrentViewId(item.id)}>
+            {item.title}
+        </Anchor>
+    ));
 
     useEffect(() => {
         const getUser = async () => {
@@ -39,10 +75,7 @@ export function MobileLayout() {
         }
     };
 
-    const handleFabClick = () => {
-        // TODO: Open task creation modal
-        addToast('タスク作成機能（未実装）', 'info');
-    };
+
 
     return (
         <AppShell
@@ -101,6 +134,11 @@ export function MobileLayout() {
                 </Group>
             </AppShell.Header>
 
+            {/* Breadcrumbs */}
+            <Group px="md" py="xs" style={{ backgroundColor: '#1A1B1E', borderBottom: '1px solid #2C2E33', position: 'sticky', top: 60, zIndex: 99 }}>
+                <Breadcrumbs separator=">">{breadcrumbs}</Breadcrumbs>
+            </Group>
+
             {/* Main Content Area */}
             <AppShell.Main>
                 <Stack p={0} style={{ paddingBottom: '90px' }}>
@@ -109,98 +147,80 @@ export function MobileLayout() {
                     )}
 
                     {activeTab === 'flow' && (
-                        <MobileFlow />
+                        <MobileFlow
+                            currentViewId={currentViewId}
+                            setCurrentViewId={setCurrentViewId}
+                        />
                     )}
 
                     {activeTab === 'list' && (
-                        <MobileList />
+                        <MobileList
+                            currentViewId={currentViewId}
+                            setCurrentViewId={setCurrentViewId}
+                        />
                     )}
 
                     {activeTab === 'settings' && (
                         <MobileSettings />
                     )}
                 </Stack>
-
-                {/* Floating Action Button (FAB) */}
-                <ActionIcon
-                    size={56}
-                    radius="xl"
-                    variant="filled"
-                    color="blue"
-                    onClick={handleFabClick}
-                    style={{
-                        position: 'fixed',
-                        bottom: '80px',
-                        right: '16px',
-                        zIndex: 1000,
-                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                    }}
-                >
-                    <Plus size={28} />
-                </ActionIcon>
             </AppShell.Main>
 
-            {/* Bottom Navigation (Footer) */}
-            <AppShell.Footer>
-                <Tabs
-                    value={activeTab}
-                    onChange={(value) => setActiveTab(value as string)}
-                    variant="default"
-                    orientation="horizontal"
-                    style={{ height: '100%' }}
-                >
-                    <Tabs.List grow style={{ height: '100%', border: 'none' }}>
-                        <Tabs.Tab
-                            value="home"
-                            leftSection={<Home size={20} />}
-                            style={{
-                                flexDirection: 'column',
-                                gap: '4px',
-                                fontSize: '11px',
-                                padding: '8px 4px',
-                            }}
-                        >
-                            ホーム
-                        </Tabs.Tab>
-                        <Tabs.Tab
-                            value="flow"
-                            leftSection={<GitMerge size={20} />}
-                            style={{
-                                flexDirection: 'column',
-                                gap: '4px',
-                                fontSize: '11px',
-                                padding: '8px 4px',
-                            }}
-                        >
-                            フロー
-                        </Tabs.Tab>
-                        <Tabs.Tab
-                            value="list"
-                            leftSection={<List size={20} />}
-                            style={{
-                                flexDirection: 'column',
-                                gap: '4px',
-                                fontSize: '11px',
-                                padding: '8px 4px',
-                            }}
-                        >
-                            リスト
-                        </Tabs.Tab>
-                        <Tabs.Tab
-                            value="settings"
-                            leftSection={<Settings size={20} />}
-                            style={{
-                                flexDirection: 'column',
-                                gap: '4px',
-                                fontSize: '11px',
-                                padding: '8px 4px',
-                            }}
-                        >
-                            設定
-                        </Tabs.Tab>
-                    </Tabs.List>
-                </Tabs>
+            {/* Footer Navigation */}
+            <AppShell.Footer p="md" style={{ backgroundColor: '#1A1B1E', borderTop: '1px solid #2C2E33' }}>
+                <Group justify="space-around" style={{ position: 'relative' }}>
+
+                    {/* Floating Action Button (FAB) */}
+                    <ActionIcon
+                        variant="filled"
+                        color="blue"
+                        size={56}
+                        radius="xl"
+                        style={{
+                            position: 'absolute',
+                            top: -45,
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+                            zIndex: 101, // Higher than footer content
+                        }}
+                        onClick={() => setIsCreateModalOpen(true)}
+                    >
+                        <Plus size={28} />
+                    </ActionIcon>
+
+                    {/* Navigation Items */}
+                    <Stack gap={4} align="center" style={{ cursor: 'pointer', zIndex: 102 }} onClick={() => setActiveTab('home')}>
+                        <Home size={24} color={activeTab === 'home' ? '#339af0' : '#909296'} />
+                        <Text size="xs" c={activeTab === 'home' ? 'blue' : 'dimmed'}>Home</Text>
+                    </Stack>
+
+                    <Stack gap={4} align="center" style={{ cursor: 'pointer', zIndex: 102 }} onClick={() => setActiveTab('flow')}>
+                        <GitMerge size={24} color={activeTab === 'flow' ? '#339af0' : '#909296'} />
+                        <Text size="xs" c={activeTab === 'flow' ? 'blue' : 'dimmed'}>Flow</Text>
+                    </Stack>
+
+                    {/* Spacer for FAB */}
+                    <Box w={40} />
+
+                    <Stack gap={4} align="center" style={{ cursor: 'pointer', zIndex: 102 }} onClick={() => setActiveTab('list')}>
+                        <List size={24} color={activeTab === 'list' ? '#339af0' : '#909296'} />
+                        <Text size="xs" c={activeTab === 'list' ? 'blue' : 'dimmed'}>List</Text>
+                    </Stack>
+
+                    <Stack gap={4} align="center" style={{ cursor: 'pointer', zIndex: 102 }} onClick={() => setActiveTab('settings')}>
+                        <Settings size={24} color={activeTab === 'settings' ? '#339af0' : '#909296'} />
+                        <Text size="xs" c={activeTab === 'settings' ? 'blue' : 'dimmed'}>Settings</Text>
+                    </Stack>
+                </Group>
             </AppShell.Footer>
-        </AppShell>
+
+            {/* Global Task Creation Modal */}
+            <TaskFormModal
+                opened={isCreateModalOpen}
+                onClose={() => setIsCreateModalOpen(false)}
+                initialParentId={currentViewId}
+            />
+        </AppShell >
     );
 }

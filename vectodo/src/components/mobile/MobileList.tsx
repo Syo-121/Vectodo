@@ -2,333 +2,222 @@ import { useState } from 'react';
 import {
     Box, TextInput, Text, Badge, Checkbox,
     Drawer, Stack, Group, Button, Textarea,
-    Select, MultiSelect, ActionIcon, Table, ScrollArea
+    Select, ActionIcon, Table, ScrollArea
 } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
 import { Search, Calendar, Filter } from 'lucide-react';
 import dayjs from 'dayjs';
+import { useTaskStore } from '../../stores/taskStore';
+import { getStatusConfig, getImportanceConfig } from '../../utils/taskUtils';
+import type { Tables } from '../../supabase-types';
+import { IconFolder, IconPencil } from '@tabler/icons-react';
 
-// --- Types ---
-interface TaskNode {
-    id: string;
-    title: string;
-    description?: string;
-    status: 'TODO' | 'DOING' | 'DONE';
-    importance: 'high' | 'medium' | 'low';
-    deadline?: Date | null;
-    startDate?: Date | null;
-    project?: string;
-    tags?: string[];
-    dependencies: string[];
+type Task = Tables<'tasks'>;
+
+export interface MobileListProps {
+    currentViewId: string | null;
+    setCurrentViewId: (id: string | null) => void;
 }
 
-// --- Mock Data ---
-const mockTasks: TaskNode[] = [
-    {
-        id: '1',
-        title: '要件定義書の作成とレビュー',
-        description: 'クライアントとのミーティングを含み、最終合意を得る',
-        status: 'DONE',
-        importance: 'high',
-        deadline: new Date('2025-12-20'),
-        project: 'Project Alpha',
-        tags: ['Document', 'Meeting'],
-        dependencies: []
-    },
-    {
-        id: '2',
-        title: 'UIデザインプロトタイプ作成',
-        description: 'Figmaを使用して画面遷移図とコンポーネントを作成',
-        status: 'DOING',
-        importance: 'medium',
-        deadline: new Date('2025-12-22'),
-        project: 'Project Alpha',
-        tags: ['Design', 'UI/UX'],
-        dependencies: ['1']
-    },
-    {
-        id: '3',
-        title: 'データベーススキーマ設計',
-        description: 'Supabaseのテーブル定義とRLSポリシーの策定',
-        status: 'TODO',
-        importance: 'high',
-        deadline: new Date('2025-12-23'),
-        project: 'Backend',
-        tags: ['DB', 'SQL'],
-        dependencies: ['1']
-    },
-    {
-        id: '4',
-        title: '認証機能の実装 (OAuth)',
-        description: 'Googleログインとメール認証の実装',
-        status: 'TODO',
-        importance: 'high',
-        deadline: new Date('2025-12-24'),
-        project: 'Backend',
-        tags: ['Auth', 'Security'],
-        dependencies: ['3']
-    },
-    {
-        id: '5',
-        title: 'メインダッシュボード実装',
-        description: 'タスク一覧、カレンダー、ガントチャートの表示',
-        status: 'TODO',
-        importance: 'medium',
-        deadline: new Date('2025-12-25'),
-        project: 'Frontend',
-        tags: ['React', 'Mantine'],
-        dependencies: ['2']
-    },
-    {
-        id: '6',
-        title: 'モバイルレスポンシブ対応',
-        description: 'スマートフォンでの表示崩れを修正',
-        status: 'DOING',
-        importance: 'low',
-        deadline: new Date('2025-12-26'),
-        project: 'Frontend',
-        tags: ['CSS', 'Mobile'],
-        dependencies: ['5']
-    },
-    {
-        id: '7',
-        title: 'APIエンドポイントのテスト',
-        description: 'JestとSupertestを使用した結合テスト',
-        status: 'TODO',
-        importance: 'high',
-        deadline: new Date('2025-12-27'),
-        project: 'QA',
-        tags: ['Test', 'CI/CD'],
-        dependencies: ['4']
-    },
-    {
-        id: '8',
-        title: 'パフォーマンスチューニング',
-        description: 'レンダリング最適化とクエリ改善',
-        status: 'TODO',
-        importance: 'medium',
-        deadline: new Date('2025-12-28'),
-        project: 'Optimization',
-        tags: ['Performance'],
-        dependencies: []
-    },
-    {
-        id: '9',
-        title: 'ユーザーマニュアル作成',
-        description: '操作方法をまとめたドキュメント',
-        status: 'TODO',
-        importance: 'low',
-        deadline: new Date('2025-12-29'),
-        project: 'Documentation',
-        tags: ['Doc'],
-        dependencies: ['1', '2']
-    },
-    {
-        id: '10',
-        title: 'v1.0 リリース作業',
-        description: '本番環境へのデプロイと最終確認',
-        status: 'TODO',
-        importance: 'high',
-        deadline: new Date('2025-12-30'),
-        project: 'Release',
-        tags: ['Deploy', 'Ops'],
-        dependencies: ['7', '8']
-    },
-];
+export function MobileList({ currentViewId, setCurrentViewId }: MobileListProps) {
+    // --- Store & State ---
+    const {
+        tasks,
+        updateTask,
+        // we can access updateTaskStatus from store explicitly if needed
+    } = useTaskStore();
 
-// --- Helpers ---
-const getStatusColor = (status: string) => {
-    switch (status) {
-        case 'TODO': return 'gray';
-        case 'DOING': return 'blue';
-        case 'DONE': return 'green';
-        default: return 'gray';
-    }
-};
+    // Local filter state (search)
+    const [searchQuery, setSearchQuery] = useState('');
 
-const getImportanceColor = (importance: string) => {
-    switch (importance) {
-        case 'high': return 'red';
-        case 'medium': return 'yellow';
-        case 'low': return 'blue';
-        default: return 'gray';
-    }
-};
-
-export function MobileList() {
-    // --- State ---
-    const [tasks, setTasks] = useState<TaskNode[]>(mockTasks);
-    const [searchTerm, setSearchTerm] = useState('');
-
-    // Drawer State
+    // Drawer state
     const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
-    const [editForm, setEditForm] = useState<TaskNode | null>(null);
+    const [editForm, setEditForm] = useState<Task | null>(null);
 
-    // Filter
-    const filteredTasks = tasks.filter(t =>
-        t.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        t.project?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    // --- Derived Data ---
+    // Filter by hierarchy AND search query
+    const displayTasks = tasks.filter(task => {
+        // 1. Hierarchy Check
+        const isChildOfCurrent = currentViewId
+            ? task.parent_id === currentViewId
+            : task.parent_id === null;
+
+        if (!isChildOfCurrent && !searchQuery) return false;
+
+        // If searching, we enforce hierarchy first as per requirement
+        if (!isChildOfCurrent) return false;
+
+        // 2. Search Check
+        if (searchQuery && !task.title.toLowerCase().includes(searchQuery.toLowerCase())) {
+            return false;
+        }
+
+        return true;
+    });
+
+    // Helper to check if task has children
+    const hasChildren = (taskId: string) => {
+        return tasks.some(t => t.parent_id === taskId);
+    };
 
     // --- Handlers ---
-    const handleTaskClick = (task: TaskNode) => {
-        setEditForm({ ...task });
+    const handleTaskClick = (task: Task) => {
+        setCurrentViewId(task.id);
+    };
+
+    const handleEditClick = (e: React.MouseEvent, task: Task) => {
+        e.stopPropagation(); // Prevent row click
         setActiveTaskId(task.id);
+        setEditForm({ ...task });
     };
 
-    const handleSave = () => {
-        if (!editForm) return;
-        setTasks(prev => prev.map(t => t.id === editForm.id ? editForm : t));
-        setActiveTaskId(null);
-    };
+    const handleSave = async () => {
+        if (!editForm || !editForm.id) return;
 
-    const toggleComplete = (taskId: string, currentStatus: string) => {
-        setTasks(prev => prev.map(t => {
-            if (t.id === taskId) {
-                return { ...t, status: currentStatus === 'DONE' ? 'TODO' : 'DONE' };
+        try {
+            await updateTask(editForm.id, {
+                title: editForm.title,
+                description: editForm.description,
+                importance: editForm.importance,
+                deadline: editForm.deadline,
+                // project_id is not editable here
+            });
+
+            // Check status change strictly
+            const originalTask = tasks.find(t => t.id === editForm.id);
+            if (originalTask && editForm.status && originalTask.status !== editForm.status) {
+                await useTaskStore.getState().updateTaskStatus(editForm.id, editForm.status);
             }
-            return t;
-        }));
+
+            setActiveTaskId(null);
+            setEditForm(null);
+        } catch (error) {
+            console.error('Failed to update task:', error);
+        }
+    };
+
+    const handleToggleComplete = async (e: React.MouseEvent, task: Task) => {
+        e.stopPropagation();
+        const newStatus = task.status === 'DONE' ? 'TODO' : 'DONE';
+        await useTaskStore.getState().updateTaskStatus(task.id, newStatus);
     };
 
     return (
-        <Box style={{
-            height: 'calc(100vh - 130px)',
-            display: 'flex',
-            flexDirection: 'column',
-            backgroundColor: '#1A1B1E', // Canvas Background
-        }}>
-            {/* 1. Header Area (Fixed) */}
-            <Box p="md" style={{ backgroundColor: '#1A1B1E', borderBottom: '1px solid #373A40', zIndex: 10 }}>
+        <Box style={{ height: 'calc(100vh - 130px)', display: 'flex', flexDirection: 'column', backgroundColor: '#1A1B1E' }}>
+            {/* 1. Fixed Header (Search & Filter) */}
+            <Box p="md" style={{ borderBottom: '1px solid #2C2E33', backgroundColor: '#1A1B1E' }}>
                 <Group gap="xs">
                     <TextInput
-                        placeholder="タスクを検索..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.currentTarget.value)}
+                        placeholder="検索..."
                         leftSection={<Search size={16} />}
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.currentTarget.value)}
                         style={{ flex: 1 }}
-                        styles={{
-                            input: {
-                                backgroundColor: '#25262B',
-                                color: '#C1C2C5',
-                                border: '1px solid #373A40'
-                            }
-                        }}
+                        styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#C1C2C5' } }}
                     />
-                    <ActionIcon variant="filled" color="dark" size="lg" radius="md">
+                    <ActionIcon variant="light" color="gray" size="lg" radius="md">
                         <Filter size={20} />
                     </ActionIcon>
                 </Group>
             </Box>
 
             {/* 2. Scrollable Table Area */}
-            <ScrollArea
-                style={{ flex: 1 }}
-                type="auto"
-                offsetScrollbars
-                styles={{
-                    scrollbar: {
-                        borderRadius: 0,
-                        '&:hover': { backgroundColor: 'transparent' },
-                    },
-                    thumb: { backgroundColor: '#373A40' }
-                }}
-            >
+            <ScrollArea style={{ flex: 1 }} type="never">
                 <Table
-                    horizontalSpacing="md"
-                    verticalSpacing="sm"
                     withTableBorder={false}
                     withColumnBorders={false}
+                    horizontalSpacing="md"
+                    verticalSpacing="sm"
                     stickyHeader
-                    highlightOnHover
-                    style={{ minWidth: '800px' }} // Ensure horizontal scroll
                 >
-                    <Table.Thead
-                        style={{
-                            backgroundColor: '#1A1B1E',
-                            zIndex: 5
-                        }}
-                    >
-                        <Table.Tr style={{ backgroundColor: '#1A1B1E' }}>
-                            <Table.Th style={{ width: '4px', padding: 0 }}></Table.Th>
-                            <Table.Th style={{ width: '40px', color: '#909296' }}><Checkbox size="xs" color="gray" disabled checked={false} style={{ opacity: 0.5 }} /></Table.Th>
-                            <Table.Th style={{ color: '#909296', minWidth: '200px' }}>タスク</Table.Th>
-                            <Table.Th style={{ color: '#909296', minWidth: '80px' }}>重要度</Table.Th>
-                            <Table.Th style={{ color: '#909296', minWidth: '80px' }}>ステータス</Table.Th>
-                            <Table.Th style={{ color: '#909296', minWidth: '120px' }}>期限</Table.Th>
+                    <Table.Thead bg="#1A1B1E">
+                        <Table.Tr>
+                            <Table.Th w={6} p={0} />
+                            <Table.Th w={40} />
+                            <Table.Th style={{ minWidth: 200, color: '#909296' }}>Task</Table.Th>
+                            <Table.Th style={{ color: '#909296' }}>Imp</Table.Th>
+                            <Table.Th style={{ color: '#909296' }}>Status</Table.Th>
+                            <Table.Th style={{ color: '#909296' }}>Date</Table.Th>
+                            <Table.Th w={50} />
                         </Table.Tr>
                     </Table.Thead>
                     <Table.Tbody>
-                        {filteredTasks.map((task) => {
-                            const statusColor = getStatusColor(task.status);
-                            const isDone = task.status === 'DONE';
+                        {displayTasks.map((task) => {
+                            const isDone = task.status === 'DONE' || task.status === 'done';
                             const formattedDate = task.deadline ? dayjs(task.deadline).format('MM/DD HH:mm') : '-';
+                            const importanceConfig = getImportanceConfig(task.importance || 0);
+                            const statusConfig = getStatusConfig(task.status || 'todo');
+                            const isFolder = hasChildren(task.id);
 
                             return (
                                 <Table.Tr
                                     key={task.id}
                                     onClick={() => handleTaskClick(task)}
                                     style={{
-                                        cursor: 'pointer',
-                                        backgroundColor: '#1A1B1E',
-                                        borderBottom: '1px solid #2C2E33',
-                                        transition: 'background-color 0.2s'
+                                        cursor: isFolder ? 'pointer' : 'default',
+                                        backgroundColor: isDone ? 'rgba(0,0,0,0.2)' : undefined,
+                                        transition: 'background-color 0.2s',
+                                        '&:hover': { backgroundColor: '#25262B' }
                                     }}
                                 >
                                     {/* 1. Color Bar */}
-                                    <Table.Td style={{ padding: 0 }}>
-                                        <Box
-                                            style={{
-                                                width: '4px',
-                                                height: '40px',
-                                                backgroundColor: `var(--mantine-color-${statusColor}-filled)`,
-                                                borderRadius: '0 2px 2px 0'
-                                            }}
-                                        />
+                                    <Table.Td p={0} w={6}>
+                                        <Box w={6} h={40} bg={statusConfig.color} style={{ borderRadius: '0 4px 4px 0' }} />
                                     </Table.Td>
 
                                     {/* 2. Checkbox */}
-                                    <Table.Td>
+                                    <Table.Td w={40} pl="xs">
                                         <Checkbox
                                             checked={isDone}
-                                            onChange={() => toggleComplete(task.id, task.status)}
+                                            onChange={() => { }} // Controlled by onClick
+                                            onClick={(e) => handleToggleComplete(e, task)}
                                             color="green"
-                                            onClick={(e) => e.stopPropagation()}
+                                            radius="xl"
+                                            size="sm"
+                                            style={{ cursor: 'pointer' }}
                                         />
                                     </Table.Td>
 
-                                    {/* 3. Task Title */}
+                                    {/* 3. Task Title & Folder Icon */}
                                     <Table.Td>
-                                        <Text
-                                            c="#C1C2C5"
-                                            fw={500}
-                                            size="sm"
-                                            lineClamp={2}
-                                            td={isDone ? 'line-through' : undefined}
-                                        >
-                                            {task.title}
-                                        </Text>
+                                        <Group gap="xs" wrap="nowrap">
+                                            <IconFolder
+                                                size={18}
+                                                fill={isFolder ? "#FFD43B" : "none"}
+                                                color={isFolder ? "#FAB005" : "#5c5f66"}
+                                            />
+                                            <Text
+                                                c="#C1C2C5"
+                                                fw={500}
+                                                size="sm"
+                                                lineClamp={2}
+                                                td={isDone ? 'line-through' : undefined}
+                                                opacity={isDone ? 0.6 : 1}
+                                            >
+                                                {task.title}
+                                            </Text>
+                                        </Group>
                                     </Table.Td>
 
                                     {/* 4. Importance */}
                                     <Table.Td>
                                         <Badge
-                                            color={getImportanceColor(task.importance)}
+                                            color={importanceConfig.color}
                                             variant="light"
                                             size="sm"
                                         >
-                                            {task.importance.toUpperCase()}
+                                            {importanceConfig.label}
                                         </Badge>
                                     </Table.Td>
 
                                     {/* 5. Status */}
                                     <Table.Td>
                                         <Badge
-                                            color={getStatusColor(task.status)}
+                                            color={statusConfig.color}
                                             variant="outline"
                                             size="sm"
                                         >
-                                            {task.status}
+                                            {statusConfig.label}
                                         </Badge>
                                     </Table.Td>
 
@@ -341,22 +230,49 @@ export function MobileList() {
                                             </Text>
                                         </Group>
                                     </Table.Td>
+
+                                    {/* 7. Action (Edit) */}
+                                    <Table.Td w={50} align="right">
+                                        <ActionIcon
+                                            variant="subtle"
+                                            color="gray"
+                                            onClick={(e) => handleEditClick(e, task)}
+                                        >
+                                            <IconPencil size={18} />
+                                        </ActionIcon>
+                                    </Table.Td>
                                 </Table.Tr>
                             );
                         })}
+                        {displayTasks.length === 0 && (
+                            <Table.Tr>
+                                <Table.Td colSpan={7}>
+                                    <Text ta="center" c="dimmed" py="xl">
+                                        タスクがありません
+                                    </Text>
+                                </Table.Td>
+                            </Table.Tr>
+                        )}
                     </Table.Tbody>
                 </Table>
             </ScrollArea>
 
-            {/* Edit Drawer (Same as MobileFlow) */}
+            {/* Edit Drawer */}
             <Drawer
                 opened={!!activeTaskId}
-                onClose={() => setActiveTaskId(null)}
+                onClose={() => {
+                    setActiveTaskId(null);
+                    setEditForm(null);
+                }}
                 position="bottom"
                 size="90%"
-                title={<Text fw={700}>タスク編集</Text>}
+                title={<Text fw={700} c="#C1C2C5">タスク編集</Text>}
                 padding="md"
                 zIndex={2000}
+                styles={{
+                    content: { backgroundColor: '#1A1B1E', color: '#C1C2C5' },
+                    header: { backgroundColor: '#1A1B1E', color: '#C1C2C5' }
+                }}
             >
                 {editForm && (
                     <Stack gap="md" pb={50}>
@@ -364,6 +280,7 @@ export function MobileList() {
                             label="タイトル"
                             value={editForm.title}
                             onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                            styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#C1C2C5' }, label: { color: '#C1C2C5' } }}
                         />
 
                         <Textarea
@@ -371,46 +288,50 @@ export function MobileList() {
                             value={editForm.description || ''}
                             onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
                             minRows={2}
+                            styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#C1C2C5' }, label: { color: '#C1C2C5' } }}
                         />
 
                         <Group grow>
                             <Select
                                 label="ステータス"
-                                value={editForm.status}
+                                value={editForm.status || 'TODO'}
                                 onChange={(val) => val && setEditForm({ ...editForm, status: val as any })}
                                 data={['TODO', 'DOING', 'DONE']}
+                                styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#C1C2C5' }, label: { color: '#C1C2C5' } }}
                             />
                             <Select
                                 label="重要度"
-                                value={editForm.importance}
-                                onChange={(val) => val && setEditForm({ ...editForm, importance: val as any })}
-                                data={['high', 'medium', 'low']}
+                                value={(editForm.importance || 0) >= 80 ? 'high' : (editForm.importance || 0) >= 50 ? 'medium' : 'low'}
+                                onChange={(val) => {
+                                    let numVal = 50;
+                                    if (val === 'high') numVal = 80;
+                                    if (val === 'medium') numVal = 50;
+                                    if (val === 'low') numVal = 20;
+                                    setEditForm({ ...editForm, importance: numVal });
+                                }}
+                                data={[
+                                    { value: 'high', label: 'High' },
+                                    { value: 'medium', label: 'Medium' },
+                                    { value: 'low', label: 'Low' }
+                                ]}
+                                styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#C1C2C5' }, label: { color: '#C1C2C5' } }}
                             />
                         </Group>
 
                         <TextInput
-                            label="プロジェクト"
-                            value={editForm.project || ''}
-                            onChange={(e) => setEditForm({ ...editForm, project: e.target.value })}
+                            label="プロジェクトID"
+                            value={editForm.project_id || ''}
+                            readOnly
+                            styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#909296' }, label: { color: '#C1C2C5' } }}
                         />
 
                         <DatePickerInput
                             label="期限"
-                            value={editForm.deadline}
-                            onChange={(date) => setEditForm({ ...editForm, deadline: date })}
+                            value={editForm.deadline ? new Date(editForm.deadline) : null}
+                            onChange={(date: Date | null) => setEditForm({ ...editForm, deadline: date ? date.toISOString() : null })}
                             leftSection={<Calendar size={16} />}
                             clearable
-                        />
-
-                        <MultiSelect
-                            label="依存タスク"
-                            data={tasks
-                                .filter(t => t.id !== editForm.id)
-                                .map(t => ({ value: t.id, label: t.title }))
-                            }
-                            value={editForm.dependencies}
-                            onChange={(vals) => setEditForm({ ...editForm, dependencies: vals })}
-                            searchable
+                            styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#C1C2C5' }, label: { color: '#C1C2C5' } }}
                         />
 
                         <Button fullWidth onClick={handleSave} mt="md">
