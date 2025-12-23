@@ -1,27 +1,60 @@
 import { useState, useEffect } from 'react';
-import { AppShell, Stack, ActionIcon, Group, Title, Avatar, Menu, Text, Breadcrumbs, Anchor } from '@mantine/core';
+import { AppShell, Stack, ActionIcon, Group, Title, Avatar, Menu, Text, Breadcrumbs, Anchor, Box } from '@mantine/core';
 import { Home, GitMerge, List, Settings, Plus, CheckSquare, LogOut } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { useToastStore } from '../../stores/useToastStore';
 import { useTaskStore } from '../../stores/taskStore';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
+import type { Tables } from '../../supabase-types';
 import { MobileHome } from './MobileHome';
 import { MobileFlow } from './MobileFlow';
 import { MobileList } from './MobileList';
 import { MobileSettings } from './MobileSettings';
 import { TaskFormModal } from '../TaskFormModal';
 
+type Task = Tables<'tasks'>;
+
 export function MobileLayout() {
     const [activeTab, setActiveTab] = useState<string>('home');
     const [user, setUser] = useState<SupabaseUser | null>(null);
     const [currentViewId, setCurrentViewId] = useState<string | null>(null);
-    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const addToast = useToastStore(state => state.addToast);
     const { tasks, fetchTasks } = useTaskStore();
+
+    // Centralized Modal State
+    interface ModalState {
+        opened: boolean;
+        task?: Task | null;
+        initialParentId?: string | null;
+    }
+    const [modalState, setModalState] = useState<ModalState>({ opened: false });
 
     useEffect(() => {
         fetchTasks();
     }, [fetchTasks]);
+
+    // Handlers
+    const handleCreateTask = () => {
+        setModalState({
+            opened: true,
+            task: null,
+            initialParentId: currentViewId
+        });
+    };
+
+    const handleEditTask = (task: Task) => {
+        setModalState({
+            opened: true,
+            task: task,
+            initialParentId: null
+        });
+    };
+
+    const handleCloseModal = () => {
+        setModalState({ ...modalState, opened: false });
+        // Delay clearing data slightly to allow close animation if needed, or clear immediately.
+        // Clearing immediately is safer to avoid stale data on reopen.
+    };
 
     // Helper to generate breadcrumbs path
     const getBreadcrumbs = () => {
@@ -74,8 +107,6 @@ export function MobileLayout() {
             addToast(`ログアウト失敗: ${error.message}`, 'error');
         }
     };
-
-
 
     return (
         <AppShell
@@ -143,13 +174,16 @@ export function MobileLayout() {
             <AppShell.Main>
                 <Stack p={0} style={{ paddingBottom: '90px' }}>
                     {activeTab === 'home' && (
-                        <MobileHome />
+                        <MobileHome
+                            onEditTask={handleEditTask}
+                        />
                     )}
 
                     {activeTab === 'flow' && (
                         <MobileFlow
                             currentViewId={currentViewId}
                             setCurrentViewId={setCurrentViewId}
+                            onEditTask={handleEditTask}
                         />
                     )}
 
@@ -157,6 +191,7 @@ export function MobileLayout() {
                         <MobileList
                             currentViewId={currentViewId}
                             setCurrentViewId={setCurrentViewId}
+                            onEditTask={handleEditTask}
                         />
                     )}
 
@@ -179,7 +214,7 @@ export function MobileLayout() {
                     zIndex: 105,
                     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
                 }}
-                onClick={() => setIsCreateModalOpen(true)}
+                onClick={handleCreateTask}
             >
                 <Plus size={28} />
             </ActionIcon>
@@ -211,11 +246,12 @@ export function MobileLayout() {
                 </Group>
             </AppShell.Footer>
 
-            {/* Global Task Creation Modal */}
+            {/* Global Task Modal */}
             <TaskFormModal
-                opened={isCreateModalOpen}
-                onClose={() => setIsCreateModalOpen(false)}
-                initialParentId={currentViewId}
+                opened={modalState.opened}
+                onClose={handleCloseModal}
+                task={modalState.task}
+                initialParentId={modalState.initialParentId}
             />
         </AppShell >
     );

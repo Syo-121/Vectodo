@@ -1,10 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import {
-    Paper, Text, Badge, Group, Stack, Box, Drawer,
-    TextInput, Textarea, Select, Button, Slider, ActionIcon, Center
+    Paper, Text, Badge, Group, Stack, Box, ActionIcon, Center, Slider
 } from '@mantine/core';
-import { DatePickerInput } from '@mantine/dates';
-import { Calendar } from 'lucide-react';
 import { useTaskStore } from '../../stores/taskStore';
 import { getStatusConfig, getImportanceConfig } from '../../utils/taskUtils';
 import type { Tables } from '../../supabase-types';
@@ -15,6 +12,7 @@ type Task = Tables<'tasks'>;
 export interface MobileFlowProps {
     currentViewId: string | null;
     setCurrentViewId: (id: string | null) => void;
+    onEditTask: (task: Task) => void;
 }
 
 interface LayoutNode {
@@ -33,12 +31,11 @@ const GAP_X = 30;
 const GAP_Y = 80;
 const PADDING = 50;
 
-export function MobileFlow({ currentViewId, setCurrentViewId }: MobileFlowProps) {
+export function MobileFlow({ currentViewId, setCurrentViewId, onEditTask }: MobileFlowProps) {
     // --- Store & State ---
     const {
         tasks,
         dependencies, // Fetch dependencies separately
-        updateTask,
         fetchDependencies
     } = useTaskStore();
 
@@ -54,10 +51,6 @@ export function MobileFlow({ currentViewId, setCurrentViewId }: MobileFlowProps)
     const dragStartRef = useRef<{ x: number, y: number } | null>(null);
     const lastOffsetRef = useRef<{ x: number, y: number }>({ x: 0, y: 0 });
     const hasMovedRef = useRef(false);
-
-    // Drawer State
-    const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
-    const [editForm, setEditForm] = useState<Task | null>(null);
 
     // --- Derived Data (Filtered for Hierarchy) ---
     const visibleTasks = useMemo(() => {
@@ -216,6 +209,7 @@ export function MobileFlow({ currentViewId, setCurrentViewId }: MobileFlowProps)
         e.currentTarget.releasePointerCapture(e.pointerId);
     };
 
+    // Drill down
     const handleCardClick = (task: Task) => {
         if (hasMovedRef.current) return;
         setCurrentViewId(task.id);
@@ -223,34 +217,10 @@ export function MobileFlow({ currentViewId, setCurrentViewId }: MobileFlowProps)
 
     const handleEditClick = (e: React.MouseEvent, task: Task) => {
         e.stopPropagation();
-        setEditForm({ ...task });
-        setActiveTaskId(task.id);
+        onEditTask(task);
     };
 
-    const handleSave = async () => {
-        if (!editForm || !editForm.id) return;
-
-        try {
-            await updateTask(editForm.id, {
-                title: editForm.title,
-                description: editForm.description,
-                importance: editForm.importance,
-                deadline: editForm.deadline,
-            });
-
-            // Check status change
-            const originalTask = tasks.find(t => t.id === editForm.id);
-            if (originalTask && editForm.status && originalTask.status !== editForm.status) {
-                await useTaskStore.getState().updateTaskStatus(editForm.id, editForm.status);
-            }
-
-            setActiveTaskId(null);
-            setEditForm(null);
-        } catch (error) {
-            console.error('Failed to update task:', error);
-        }
-    };
-
+    // Drawing Helpers
     const createPath = (from: LayoutNode, to: LayoutNode) => {
         const fromX = from.x + from.width / 2;
         const fromY = from.y + from.height;
@@ -399,82 +369,6 @@ export function MobileFlow({ currentViewId, setCurrentViewId }: MobileFlowProps)
                     );
                 })}
             </div>
-
-            <Drawer
-                opened={!!activeTaskId}
-                onClose={() => {
-                    setActiveTaskId(null);
-                    setEditForm(null);
-                }}
-                position="bottom"
-                size="90%"
-                title={<Text fw={700} c="#C1C2C5">タスク編集</Text>}
-                padding="md"
-                zIndex={2000}
-                styles={{
-                    content: { backgroundColor: '#1A1B1E', color: '#C1C2C5' },
-                    header: { backgroundColor: '#1A1B1E', color: '#C1C2C5' }
-                }}
-            >
-                {editForm && (
-                    <Stack gap="md" pb={50}>
-                        <TextInput
-                            label="タイトル"
-                            value={editForm.title}
-                            onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                            styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#C1C2C5' }, label: { color: '#C1C2C5' } }}
-                        />
-
-                        <Textarea
-                            label="詳細"
-                            value={editForm.description || ''}
-                            onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                            minRows={2}
-                            styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#C1C2C5' }, label: { color: '#C1C2C5' } }}
-                        />
-
-                        <Group grow>
-                            <Select
-                                label="ステータス"
-                                value={editForm.status || 'TODO'}
-                                onChange={(val) => val && setEditForm({ ...editForm, status: val as any })}
-                                data={['TODO', 'DOING', 'DONE']}
-                                styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#C1C2C5' }, label: { color: '#C1C2C5' } }}
-                            />
-                            <Select
-                                label="重要度"
-                                value={(editForm.importance || 0) >= 80 ? 'high' : (editForm.importance || 0) >= 50 ? 'medium' : 'low'}
-                                onChange={(val) => {
-                                    let numVal = 50;
-                                    if (val === 'high') numVal = 80;
-                                    if (val === 'medium') numVal = 50;
-                                    if (val === 'low') numVal = 20;
-                                    setEditForm({ ...editForm, importance: numVal });
-                                }}
-                                data={[
-                                    { value: 'high', label: 'High' },
-                                    { value: 'medium', label: 'Medium' },
-                                    { value: 'low', label: 'Low' }
-                                ]}
-                                styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#C1C2C5' }, label: { color: '#C1C2C5' } }}
-                            />
-                        </Group>
-
-                        <DatePickerInput
-                            label="期限"
-                            value={editForm.deadline ? new Date(editForm.deadline) : null}
-                            onChange={(date: Date | null) => setEditForm({ ...editForm, deadline: date ? date.toISOString() : null })}
-                            leftSection={<Calendar size={16} />}
-                            clearable
-                            styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#C1C2C5' }, label: { color: '#C1C2C5' } }}
-                        />
-
-                        <Button fullWidth onClick={handleSave} mt="md">
-                            保存する
-                        </Button>
-                    </Stack>
-                )}
-            </Drawer>
 
             <Paper
                 shadow="sm"

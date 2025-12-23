@@ -1,11 +1,9 @@
 import { useState } from 'react';
 import {
     Box, TextInput, Text, Badge, Checkbox,
-    Drawer, Stack, Group, Button, Textarea,
-    Select, ActionIcon, Table, ScrollArea, Tooltip
+    Stack, Group, ActionIcon, Table, ScrollArea
 } from '@mantine/core';
-import { DatePickerInput } from '@mantine/dates';
-import { Search, Calendar, Filter, Clock, Repeat } from 'lucide-react';
+import { Search, Filter, Clock, Repeat, Calendar } from 'lucide-react';
 import dayjs from 'dayjs';
 import { useTaskStore } from '../../stores/taskStore';
 import { getStatusConfig, getImportanceConfig } from '../../utils/taskUtils';
@@ -17,21 +15,17 @@ type Task = Tables<'tasks'>;
 export interface MobileListProps {
     currentViewId: string | null;
     setCurrentViewId: (id: string | null) => void;
+    onEditTask: (task: Task) => void;
 }
 
-export function MobileList({ currentViewId, setCurrentViewId }: MobileListProps) {
+export function MobileList({ currentViewId, setCurrentViewId, onEditTask }: MobileListProps) {
     // --- Store & State ---
     const {
         tasks,
-        updateTask,
     } = useTaskStore();
 
     // Local filter state (search)
     const [searchQuery, setSearchQuery] = useState('');
-
-    // Drawer state
-    const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
-    const [editForm, setEditForm] = useState<Task | null>(null);
 
     // --- Derived Data ---
     const displayTasks = tasks.filter(task => {
@@ -65,36 +59,7 @@ export function MobileList({ currentViewId, setCurrentViewId }: MobileListProps)
 
     const handleEditClick = (e: React.MouseEvent, task: Task) => {
         e.stopPropagation();
-        setActiveTaskId(task.id);
-        setEditForm({ ...task });
-    };
-
-    const handleSave = async () => {
-        if (!editForm || !editForm.id) return;
-
-        try {
-            await updateTask(editForm.id, {
-                title: editForm.title,
-                description: editForm.description,
-                importance: editForm.importance,
-                deadline: editForm.deadline,
-                estimate_minutes: editForm.estimate_minutes,
-                planned_start: editForm.planned_start,
-                planned_end: editForm.planned_end,
-                status: editForm.status,
-            });
-
-            // Check status change strictly
-            const originalTask = tasks.find(t => t.id === editForm.id);
-            if (originalTask && editForm.status && originalTask.status !== editForm.status) {
-                await useTaskStore.getState().updateTaskStatus(editForm.id, editForm.status);
-            }
-
-            setActiveTaskId(null);
-            setEditForm(null);
-        } catch (error) {
-            console.error('Failed to update task:', error);
-        }
+        onEditTask(task);
     };
 
     const handleToggleComplete = async (e: React.MouseEvent, task: Task) => {
@@ -319,111 +284,6 @@ export function MobileList({ currentViewId, setCurrentViewId }: MobileListProps)
                     </Table.Tbody>
                 </Table>
             </ScrollArea>
-
-            {/* Edit Drawer */}
-            <Drawer
-                opened={!!activeTaskId}
-                onClose={() => {
-                    setActiveTaskId(null);
-                    setEditForm(null);
-                }}
-                position="bottom"
-                size="90%"
-                title={<Text fw={700} c="#C1C2C5">タスク編集</Text>}
-                padding="md"
-                zIndex={2000}
-                styles={{
-                    content: { backgroundColor: '#1A1B1E', color: '#C1C2C5' },
-                    header: { backgroundColor: '#1A1B1E', color: '#C1C2C5' }
-                }}
-            >
-                {editForm && (
-                    <Stack gap="md" pb={50}>
-                        <TextInput
-                            label="タイトル"
-                            value={editForm.title}
-                            onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                            styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#C1C2C5' }, label: { color: '#C1C2C5' } }}
-                        />
-
-                        <Textarea
-                            label="詳細"
-                            value={editForm.description || ''}
-                            onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                            minRows={2}
-                            styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#C1C2C5' }, label: { color: '#C1C2C5' } }}
-                        />
-
-                        <Group grow>
-                            <Select
-                                label="ステータス"
-                                value={editForm.status || 'TODO'}
-                                onChange={(val) => val && setEditForm({ ...editForm, status: val as any })}
-                                data={['TODO', 'DOING', 'DONE']}
-                                styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#C1C2C5' }, label: { color: '#C1C2C5' } }}
-                            />
-                            <Select
-                                label="重要度"
-                                value={(editForm.importance || 0) >= 80 ? 'high' : (editForm.importance || 0) >= 50 ? 'medium' : 'low'}
-                                onChange={(val) => {
-                                    let numVal = 50;
-                                    if (val === 'high') numVal = 80;
-                                    if (val === 'medium') numVal = 50;
-                                    if (val === 'low') numVal = 20;
-                                    setEditForm({ ...editForm, importance: numVal });
-                                }}
-                                data={[
-                                    { value: 'high', label: 'High' },
-                                    { value: 'medium', label: 'Medium' },
-                                    { value: 'low', label: 'Low' }
-                                ]}
-                                styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#C1C2C5' }, label: { color: '#C1C2C5' } }}
-                            />
-                        </Group>
-
-                        <Group grow>
-                            <TextInput
-                                label="見積(分)"
-                                type="number"
-                                value={editForm.estimate_minutes || ''}
-                                onChange={(e) => setEditForm({ ...editForm, estimate_minutes: e.target.value ? Number(e.target.value) : null })}
-                                styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#C1C2C5' }, label: { color: '#C1C2C5' } }}
-                            />
-                        </Group>
-
-                        <DatePickerInput
-                            label="期限"
-                            value={editForm.deadline ? new Date(editForm.deadline) : null}
-                            onChange={(date: Date | null) => setEditForm({ ...editForm, deadline: date ? date.toISOString() : null })}
-                            leftSection={<Calendar size={16} />}
-                            clearable
-                            styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#C1C2C5' }, label: { color: '#C1C2C5' } }}
-                        />
-
-                        <DatePickerInput
-                            label="開始予定"
-                            value={editForm.planned_start ? new Date(editForm.planned_start) : null}
-                            onChange={(date: Date | null) => setEditForm({ ...editForm, planned_start: date ? date.toISOString() : null })}
-                            leftSection={<Calendar size={16} />}
-                            clearable
-                            styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#C1C2C5' }, label: { color: '#C1C2C5' } }}
-                        />
-
-                        <DatePickerInput
-                            label="終了予定"
-                            value={editForm.planned_end ? new Date(editForm.planned_end) : null}
-                            onChange={(date: Date | null) => setEditForm({ ...editForm, planned_end: date ? date.toISOString() : null })}
-                            leftSection={<Calendar size={16} />}
-                            clearable
-                            styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#C1C2C5' }, label: { color: '#C1C2C5' } }}
-                        />
-
-                        <Button fullWidth onClick={handleSave} mt="md">
-                            保存する
-                        </Button>
-                    </Stack>
-                )}
-            </Drawer>
         </Box>
     );
 }
