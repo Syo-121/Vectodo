@@ -255,15 +255,17 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
 
             const { currentProjectId } = get();
             const { data, error } = await supabase
-                .from('tasks')
                 .insert({
                     title: taskData.title,
                     slug: newSlug,
                     project_id: taskData.project_id,
-                    parent_id: currentProjectId,
+                    parent_id: taskData.parent_id ?? currentProjectId, // Prefer taskData.parent_id
                     estimate_minutes: taskData.estimate_minutes,
                     deadline: taskData.deadline,
+                    planned_start: taskData.planned_start, // Add planned_start
+                    planned_end: taskData.planned_end,     // Add planned_end
                     importance: taskData.importance,
+                    urgency: taskData.urgency,             // Add urgency
                     description: taskData.description,
                     recurrence: taskData.recurrence as any, // Cast to any for Json compatibility
                     user_id: userId, // Add user_id for RLS
