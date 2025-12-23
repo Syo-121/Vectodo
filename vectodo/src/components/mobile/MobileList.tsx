@@ -2,10 +2,10 @@ import { useState } from 'react';
 import {
     Box, TextInput, Text, Badge, Checkbox,
     Drawer, Stack, Group, Button, Textarea,
-    Select, ActionIcon, Table, ScrollArea
+    Select, ActionIcon, Table, ScrollArea, Tooltip
 } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
-import { Search, Calendar, Filter } from 'lucide-react';
+import { Search, Calendar, Filter, Clock, Repeat } from 'lucide-react';
 import dayjs from 'dayjs';
 import { useTaskStore } from '../../stores/taskStore';
 import { getStatusConfig, getImportanceConfig } from '../../utils/taskUtils';
@@ -24,7 +24,6 @@ export function MobileList({ currentViewId, setCurrentViewId }: MobileListProps)
     const {
         tasks,
         updateTask,
-        // we can access updateTaskStatus from store explicitly if needed
     } = useTaskStore();
 
     // Local filter state (search)
@@ -35,7 +34,6 @@ export function MobileList({ currentViewId, setCurrentViewId }: MobileListProps)
     const [editForm, setEditForm] = useState<Task | null>(null);
 
     // --- Derived Data ---
-    // Filter by hierarchy AND search query
     const displayTasks = tasks.filter(task => {
         // 1. Hierarchy Check
         const isChildOfCurrent = currentViewId
@@ -66,7 +64,7 @@ export function MobileList({ currentViewId, setCurrentViewId }: MobileListProps)
     };
 
     const handleEditClick = (e: React.MouseEvent, task: Task) => {
-        e.stopPropagation(); // Prevent row click
+        e.stopPropagation();
         setActiveTaskId(task.id);
         setEditForm({ ...task });
     };
@@ -80,7 +78,10 @@ export function MobileList({ currentViewId, setCurrentViewId }: MobileListProps)
                 description: editForm.description,
                 importance: editForm.importance,
                 deadline: editForm.deadline,
-                // project_id is not editable here
+                estimate_minutes: editForm.estimate_minutes,
+                planned_start: editForm.planned_start,
+                planned_end: editForm.planned_end,
+                status: editForm.status,
             });
 
             // Check status change strictly
@@ -100,6 +101,12 @@ export function MobileList({ currentViewId, setCurrentViewId }: MobileListProps)
         e.stopPropagation();
         const newStatus = task.status === 'DONE' ? 'TODO' : 'DONE';
         await useTaskStore.getState().updateTaskStatus(task.id, newStatus);
+    };
+
+    // Helper for formatting
+    const formatDate = (dateStr?: string | null) => {
+        if (!dateStr) return '-';
+        return dayjs(dateStr).format('MM/DD HH:mm');
     };
 
     return (
@@ -129,6 +136,7 @@ export function MobileList({ currentViewId, setCurrentViewId }: MobileListProps)
                     horizontalSpacing="md"
                     verticalSpacing="sm"
                     stickyHeader
+                    style={{ minWidth: 1000 }} // Ensure horizontal scroll
                 >
                     <Table.Thead bg="#1A1B1E">
                         <Table.Tr>
@@ -136,25 +144,36 @@ export function MobileList({ currentViewId, setCurrentViewId }: MobileListProps)
                             <Table.Th w={40} />
                             <Table.Th style={{ minWidth: 200, color: '#909296' }}>Task</Table.Th>
                             <Table.Th style={{ color: '#909296' }}>Imp</Table.Th>
+                            <Table.Th style={{ color: '#909296' }}>Urg</Table.Th>
                             <Table.Th style={{ color: '#909296' }}>Status</Table.Th>
-                            <Table.Th style={{ color: '#909296' }}>Date</Table.Th>
+                            <Table.Th style={{ color: '#909296' }}>Est</Table.Th>
+                            <Table.Th style={{ color: '#909296' }}>Deadline</Table.Th>
+                            <Table.Th style={{ color: '#909296' }}>Plan Start</Table.Th>
+                            <Table.Th style={{ color: '#909296' }}>Plan End</Table.Th>
+                            <Table.Th style={{ color: '#909296' }}>Repeat</Table.Th>
                             <Table.Th w={50} />
                         </Table.Tr>
                     </Table.Thead>
                     <Table.Tbody>
                         {displayTasks.map((task) => {
                             const isDone = task.status === 'DONE' || task.status === 'done';
-                            const formattedDate = task.deadline ? dayjs(task.deadline).format('MM/DD HH:mm') : '-';
                             const importanceConfig = getImportanceConfig(task.importance || 0);
                             const statusConfig = getStatusConfig(task.status || 'todo');
                             const isFolder = hasChildren(task.id);
+
+                            // Urgency Color
+                            const urgency = task.urgency || 0;
+                            let urgencyColor = 'gray';
+                            if (urgency >= 80) urgencyColor = 'red';
+                            else if (urgency >= 50) urgencyColor = 'orange';
+                            else if (urgency >= 20) urgencyColor = 'blue';
 
                             return (
                                 <Table.Tr
                                     key={task.id}
                                     onClick={() => handleTaskClick(task)}
                                     style={{
-                                        cursor: isFolder ? 'pointer' : 'default',
+                                        cursor: 'pointer',
                                         backgroundColor: isDone ? 'rgba(0,0,0,0.2)' : undefined,
                                         transition: 'background-color 0.2s',
                                         '&:hover': { backgroundColor: '#25262B' }
@@ -169,7 +188,7 @@ export function MobileList({ currentViewId, setCurrentViewId }: MobileListProps)
                                     <Table.Td w={40} pl="xs">
                                         <Checkbox
                                             checked={isDone}
-                                            onChange={() => { }} // Controlled by onClick
+                                            onChange={() => { }}
                                             onClick={(e) => handleToggleComplete(e, task)}
                                             color="green"
                                             radius="xl"
@@ -210,7 +229,18 @@ export function MobileList({ currentViewId, setCurrentViewId }: MobileListProps)
                                         </Badge>
                                     </Table.Td>
 
-                                    {/* 5. Status */}
+                                    {/* 5. Urgency (NEW) */}
+                                    <Table.Td>
+                                        <Badge
+                                            color={urgencyColor}
+                                            variant="outline"
+                                            size="sm"
+                                        >
+                                            {urgency}
+                                        </Badge>
+                                    </Table.Td>
+
+                                    {/* 6. Status */}
                                     <Table.Td>
                                         <Badge
                                             color={statusConfig.color}
@@ -221,17 +251,50 @@ export function MobileList({ currentViewId, setCurrentViewId }: MobileListProps)
                                         </Badge>
                                     </Table.Td>
 
-                                    {/* 6. Deadline */}
+                                    {/* 7. Estimate (NEW) */}
                                     <Table.Td>
                                         <Group gap={4}>
-                                            <Calendar size={14} color="#5c5f66" />
+                                            <Clock size={14} color="#5c5f66" />
                                             <Text size="sm" c="dimmed">
-                                                {formattedDate}
+                                                {task.estimate_minutes ? `${task.estimate_minutes}min` : '-'}
                                             </Text>
                                         </Group>
                                     </Table.Td>
 
-                                    {/* 7. Action (Edit) */}
+                                    {/* 8. Deadline */}
+                                    <Table.Td>
+                                        <Group gap={4}>
+                                            <Calendar size={14} color="#5c5f66" />
+                                            <Text size="sm" c="dimmed">
+                                                {formatDate(task.deadline)}
+                                            </Text>
+                                        </Group>
+                                    </Table.Td>
+
+                                    {/* 9. Plan Start (NEW) */}
+                                    <Table.Td>
+                                        <Text size="sm" c="dimmed">
+                                            {formatDate(task.planned_start)}
+                                        </Text>
+                                    </Table.Td>
+
+                                    {/* 10. Plan End (NEW) */}
+                                    <Table.Td>
+                                        <Text size="sm" c="dimmed">
+                                            {formatDate(task.planned_end)}
+                                        </Text>
+                                    </Table.Td>
+
+                                    {/* 11. Recurrence (NEW) */}
+                                    <Table.Td>
+                                        {task.recurrence ? (
+                                            <Repeat size={16} color="#74c0fc" />
+                                        ) : (
+                                            <Text size="sm" c="dimmed">-</Text>
+                                        )}
+                                    </Table.Td>
+
+                                    {/* 12. Action (Edit) */}
                                     <Table.Td w={50} align="right">
                                         <ActionIcon
                                             variant="subtle"
@@ -246,7 +309,7 @@ export function MobileList({ currentViewId, setCurrentViewId }: MobileListProps)
                         })}
                         {displayTasks.length === 0 && (
                             <Table.Tr>
-                                <Table.Td colSpan={7}>
+                                <Table.Td colSpan={12}>
                                     <Text ta="center" c="dimmed" py="xl">
                                         タスクがありません
                                     </Text>
@@ -318,17 +381,38 @@ export function MobileList({ currentViewId, setCurrentViewId }: MobileListProps)
                             />
                         </Group>
 
-                        <TextInput
-                            label="プロジェクトID"
-                            value={editForm.project_id || ''}
-                            readOnly
-                            styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#909296' }, label: { color: '#C1C2C5' } }}
-                        />
+                        <Group grow>
+                            <TextInput
+                                label="見積(分)"
+                                type="number"
+                                value={editForm.estimate_minutes || ''}
+                                onChange={(e) => setEditForm({ ...editForm, estimate_minutes: e.target.value ? Number(e.target.value) : null })}
+                                styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#C1C2C5' }, label: { color: '#C1C2C5' } }}
+                            />
+                        </Group>
 
                         <DatePickerInput
                             label="期限"
                             value={editForm.deadline ? new Date(editForm.deadline) : null}
                             onChange={(date: Date | null) => setEditForm({ ...editForm, deadline: date ? date.toISOString() : null })}
+                            leftSection={<Calendar size={16} />}
+                            clearable
+                            styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#C1C2C5' }, label: { color: '#C1C2C5' } }}
+                        />
+
+                        <DatePickerInput
+                            label="開始予定"
+                            value={editForm.planned_start ? new Date(editForm.planned_start) : null}
+                            onChange={(date: Date | null) => setEditForm({ ...editForm, planned_start: date ? date.toISOString() : null })}
+                            leftSection={<Calendar size={16} />}
+                            clearable
+                            styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#C1C2C5' }, label: { color: '#C1C2C5' } }}
+                        />
+
+                        <DatePickerInput
+                            label="終了予定"
+                            value={editForm.planned_end ? new Date(editForm.planned_end) : null}
+                            onChange={(date: Date | null) => setEditForm({ ...editForm, planned_end: date ? date.toISOString() : null })}
                             leftSection={<Calendar size={16} />}
                             clearable
                             styles={{ input: { backgroundColor: '#25262B', borderColor: '#373A40', color: '#C1C2C5' }, label: { color: '#C1C2C5' } }}
