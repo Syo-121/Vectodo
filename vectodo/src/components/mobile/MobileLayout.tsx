@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AppShell, Stack, ActionIcon, Group, Title, Avatar, Menu, Text, Breadcrumbs, Anchor, Box } from '@mantine/core';
+import { AppShell, Stack, ActionIcon, Group, Title, Avatar, Menu, Text, Breadcrumbs, Anchor } from '@mantine/core';
 import { Home, GitMerge, List, Settings, Plus, CheckSquare, LogOut } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { useToastStore } from '../../stores/useToastStore';
@@ -166,28 +166,27 @@ export function MobileLayout() {
                 </Stack>
             </AppShell.Main>
 
+            {/* Floating Action Button (FAB) - Fixed Bottom Right */}
+            <ActionIcon
+                variant="filled"
+                color="blue"
+                size={56}
+                radius="xl"
+                style={{
+                    position: 'fixed',
+                    bottom: 95,
+                    right: 24,
+                    zIndex: 105,
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+                }}
+                onClick={() => setIsCreateModalOpen(true)}
+            >
+                <Plus size={28} />
+            </ActionIcon>
+
             {/* Footer Navigation */}
             <AppShell.Footer p="md" style={{ backgroundColor: '#1A1B1E', borderTop: '1px solid #2C2E33' }}>
                 <Group justify="space-around" style={{ position: 'relative' }}>
-
-                    {/* Floating Action Button (FAB) */}
-                    <ActionIcon
-                        variant="filled"
-                        color="blue"
-                        size={56}
-                        radius="xl"
-                        style={{
-                            position: 'absolute',
-                            top: -45,
-                            left: '50%',
-                            transform: 'translateX(-50%)',
-                            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
-                            zIndex: 101, // Higher than footer content
-                        }}
-                        onClick={() => setIsCreateModalOpen(true)}
-                    >
-                        <Plus size={28} />
-                    </ActionIcon>
 
                     {/* Navigation Items */}
                     <Stack gap={4} align="center" style={{ cursor: 'pointer', zIndex: 102 }} onClick={() => setActiveTab('home')}>
@@ -199,9 +198,6 @@ export function MobileLayout() {
                         <GitMerge size={24} color={activeTab === 'flow' ? '#339af0' : '#909296'} />
                         <Text size="xs" c={activeTab === 'flow' ? 'blue' : 'dimmed'}>Flow</Text>
                     </Stack>
-
-                    {/* Spacer for FAB */}
-                    <Box w={40} />
 
                     <Stack gap={4} align="center" style={{ cursor: 'pointer', zIndex: 102 }} onClick={() => setActiveTab('list')}>
                         <List size={24} color={activeTab === 'list' ? '#339af0' : '#909296'} />
