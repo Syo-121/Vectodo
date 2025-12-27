@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <!-- Background -->
+  <rect width="512" height="512" fill="#1A1B1E" rx="128"/>
+  
+  <!-- Outer Square -->
+  <rect x="96" y="96" width="320" height="320" rx="32" stroke="#4DABF7" stroke-width="24" fill="none"/>
+  
+  <!-- Check Mark -->
+  <path d="M 160 256 L 230 326 L 360 186" 
+        stroke="#4DABF7" 
+        stroke-width="32" 
+        stroke-linecap="round" 
+        stroke-linejoin="round" 
+        fill="none"/>
+  
+  <!-- Accent Dot (optional, for visual interest) -->
+  <circle cx="256" cy="128" r="8" fill="#4DABF7" opacity="0.6"/>
+</svg>

@@ -17,6 +17,7 @@ import { KanbanBoard } from './features/kanban/KanbanBoard';
 import { ToastContainer } from './components/ToastContainer';
 import { MobileLayout } from './components/mobile/MobileLayout';
 import { LoginScreen } from './features/auth/LoginScreen';
+import { PWAUpdatePrompt } from './components/PWAUpdatePrompt';
 import { supabase } from './lib/supabaseClient';
 import type { Tables } from './supabase-types';
 import type { Session } from '@supabase/supabase-js';
@@ -120,6 +121,7 @@ function App() {
           limit={5}
         />
         <ToastContainer />
+        <PWAUpdatePrompt />
         <MobileLayout />
       </MantineProvider>
     );
@@ -203,6 +205,9 @@ function App() {
 
         {/* Toast Notifications */}
         <ToastContainer />
+
+        {/* PWA Update Prompt */}
+        <PWAUpdatePrompt />
       </ModalsProvider>
     </MantineProvider>
   );
