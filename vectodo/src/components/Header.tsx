@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Group, Title, ActionIcon, useMantineColorScheme, Switch, Avatar, Menu, Text } from '@mantine/core';
+import { Group, Title, ActionIcon, useMantineColorScheme, Switch, Avatar, Menu, Text, Burger } from '@mantine/core';
 import { CheckSquare, Sun, Moon, LogOut, User } from 'lucide-react';
 import { useTaskStore } from '../stores/taskStore';
 import { useToastStore } from '../stores/useToastStore';
@@ -7,7 +7,12 @@ import { Breadcrumb } from './Breadcrumb';
 import { supabase } from '../lib/supabaseClient';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
-export function Header() {
+interface HeaderProps {
+    mobileOpened?: boolean;
+    toggleMobile?: () => void;
+}
+
+export function Header({ mobileOpened, toggleMobile }: HeaderProps = {}) {
     const { colorScheme, toggleColorScheme } = useMantineColorScheme();
     const { showCompletedTasks, toggleShowCompletedTasks } = useTaskStore();
     const addToast = useToastStore(state => state.addToast);
@@ -56,6 +61,14 @@ export function Header() {
             })}
         >
             <Group>
+                {toggleMobile && (
+                    <Burger
+                        opened={mobileOpened}
+                        onClick={toggleMobile}
+                        hiddenFrom="sm"
+                        size="sm"
+                    />
+                )}
                 <CheckSquare size={32} strokeWidth={2} />
                 <Title order={1} size="h2">
                     Vectodo
