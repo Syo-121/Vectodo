@@ -252,6 +252,7 @@ export function MobileLayout() {
                 onClose={handleCloseModal}
                 task={modalState.task}
                 initialParentId={modalState.initialParentId}
+                isMobile={true}
             />
         </AppShell >
     );

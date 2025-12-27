@@ -1,6 +1,6 @@
 import '@mantine/core/styles.css';
 import '@mantine/dates/styles.css';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
     Modal,
     TextInput,
@@ -15,13 +15,14 @@ import {
     Text,
     Divider,
     Chip,
-    Collapse,
+    Box,
 } from '@mantine/core';
 import { DateInput, DateTimePicker } from '@mantine/dates';
 import { useForm } from '@mantine/form';
 import { modals } from '@mantine/modals';
 import { Save, Trash2, Clock, Zap, Repeat } from 'lucide-react';
 import { useTaskStore, type TaskData } from '../stores/taskStore';
+import { useToastStore } from '../stores/useToastStore';
 import { TEST_PROJECT_ID } from '../lib/constants';
 import type { Tables } from '../supabase-types';
 import dayjs from 'dayjs';
@@ -35,42 +36,47 @@ interface TaskFormModalProps {
     task?: Task | null;
     onUnschedule?: () => void;
     initialParentId?: string | null;
+    isMobile?: boolean;
 }
 
-export function TaskFormModal({ opened, onClose, task, onUnschedule, initialParentId }: TaskFormModalProps) {
+export function TaskFormModal({ opened, onClose, task, onUnschedule, initialParentId, isMobile = false }: TaskFormModalProps) {
     const { addTask, updateTask, deleteTask, loading, tasks, updateTaskStatus } = useTaskStore();
+    const { addToast } = useToastStore();
 
     // Helper function to get all descendants of a task (recursive)
-    const getDescendants = (taskId: string): Set<string> => {
-        const descendants = new Set<string>();
+    const descendants = useMemo(() => {
+        if (!task) return new Set<string>();
+
+        const result = new Set<string>();
         const addChildren = (id: string) => {
             const children = tasks.filter(t => t.parent_id === id);
             children.forEach(child => {
-                descendants.add(child.id);
+                result.add(child.id);
                 addChildren(child.id); // Recursive call for grandchildren
             });
         };
-        addChildren(taskId);
-        return descendants;
-    };
+        addChildren(task.id);
+        return result;
+    }, [task, tasks]);
 
     // Get available parent options (excluding self and descendants)
-    const parentOptions = [
-        { value: '', label: 'Root (最上位階層)' },
-        ...tasks
-            .filter(t => {
-                if (task && t.id === task.id) return false;
-                if (task) {
-                    const descendants = getDescendants(task.id);
-                    if (descendants.has(t.id)) return false;
-                }
-                return true;
-            })
-            .map(t => ({
-                value: t.id,
-                label: t.title,
-            })),
-    ];
+    const parentOptions = useMemo(() => {
+        return [
+            { value: '', label: 'Root (最上位階層)' },
+            ...tasks
+                .filter(t => {
+                    if (task && t.id === task.id) return false;
+                    if (task) {
+                        if (descendants.has(t.id)) return false;
+                    }
+                    return true;
+                })
+                .map(t => ({
+                    value: t.id,
+                    label: t.title,
+                })),
+        ];
+    }, [tasks, task, descendants]);
 
     const form = useForm({
         initialValues: {
@@ -97,6 +103,14 @@ export function TaskFormModal({ opened, onClose, task, onUnschedule, initialPare
     });
 
     const [showCustomRecurrence, setShowCustomRecurrence] = useState(false);
+
+    // Handler for mobile recurrence warning
+    const handleMobileRecurrenceClick = () => {
+        if (isMobile) {
+            addToast('現時点でモバイル版は繰り返し機能に対応していません', 'warning');
+        }
+    };
+
 
     // Reset form when task changes
     useEffect(() => {
@@ -384,25 +398,42 @@ export function TaskFormModal({ opened, onClose, task, onUnschedule, initialPare
                             <Repeat size={16} /> 繰り返し
                         </Text>
 
-                        <Select
-                            placeholder="繰り返しパターンを選択"
-                            data={[
-                                { value: 'none', label: 'なし' },
-                                { value: 'daily', label: '毎日' },
-                                { value: 'weekdays', label: '平日 (月〜金)' },
-                                { value: 'weekly', label: '毎週' },
-                                { value: 'monthly', label: '毎月' },
-                                { value: 'custom', label: 'カスタム...' },
-                            ]}
-                            {...form.getInputProps('recurrencePreset')}
-                            onChange={(value) => {
-                                form.setFieldValue('recurrencePreset', value || 'none');
-                                setShowCustomRecurrence(value === 'custom');
+                        <Box
+                            onClick={handleMobileRecurrenceClick}
+                            style={{
+                                cursor: isMobile ? 'pointer' : 'default',
+                                opacity: isMobile ? 0.6 : 1,
+                                pointerEvents: isMobile ? 'all' : 'auto',
                             }}
-                            size="sm"
-                        />
+                        >
+                            <Select
+                                placeholder="繰り返しパターンを選択"
+                                data={[
+                                    { value: 'none', label: 'なし' },
+                                    { value: 'daily', label: '毎日' },
+                                    { value: 'weekdays', label: '平日 (月〜金)' },
+                                    { value: 'weekly', label: '毎週' },
+                                    { value: 'monthly', label: '毎月' },
+                                    { value: 'custom', label: 'カスタム...' },
+                                ]}
+                                value={form.values.recurrencePreset}
+                                onChange={(value) => {
+                                    if (!isMobile) {
+                                        form.setFieldValue('recurrencePreset', value || 'none');
+                                        setShowCustomRecurrence(value === 'custom');
+                                    }
+                                }}
+                                allowDeselect={false}
+                                size="sm"
+                                disabled={isMobile}
+                                styles={isMobile ? {
+                                    input: { cursor: 'pointer' }
+                                } : undefined}
+                            />
+                        </Box>
 
-                        <Collapse in={showCustomRecurrence}>
+
+                        {showCustomRecurrence && !isMobile && (
                             <Stack gap="md" p="md" style={{ backgroundColor: 'var(--mantine-color-dark-6)', borderRadius: '8px' }}>
                                 <Group grow>
                                     <NumberInput
@@ -448,7 +479,7 @@ export function TaskFormModal({ opened, onClose, task, onUnschedule, initialPare
                                     </div>
                                 )}
                             </Stack>
-                        </Collapse>
+                        )}
                     </Stack>
 
                     <Divider />
