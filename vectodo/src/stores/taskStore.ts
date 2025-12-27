@@ -255,6 +255,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
 
             const { currentProjectId } = get();
             const { data, error } = await supabase
+                .from('tasks')
                 .insert({
                     title: taskData.title,
                     slug: newSlug,

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
     Box, TextInput, Text, Badge, Checkbox,
-    Stack, Group, ActionIcon, Table, ScrollArea
+    Group, ActionIcon, Table, ScrollArea
 } from '@mantine/core';
 import { Search, Filter, Clock, Repeat, Calendar } from 'lucide-react';
 import dayjs from 'dayjs';

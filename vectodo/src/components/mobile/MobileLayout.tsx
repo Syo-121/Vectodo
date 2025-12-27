@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AppShell, Stack, ActionIcon, Group, Title, Avatar, Menu, Text, Breadcrumbs, Anchor, Box } from '@mantine/core';
+import { AppShell, Stack, ActionIcon, Group, Title, Avatar, Menu, Text, Breadcrumbs, Anchor } from '@mantine/core';
 import { Home, GitMerge, List, Settings, Plus, CheckSquare, LogOut } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { useToastStore } from '../../stores/useToastStore';

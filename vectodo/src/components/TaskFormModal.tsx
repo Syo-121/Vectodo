@@ -15,7 +15,6 @@ import {
     Text,
     Divider,
     Chip,
-    Box,
 } from '@mantine/core';
 import { DateInput, DateTimePicker } from '@mantine/dates';
 import { useForm } from '@mantine/form';
@@ -107,7 +106,7 @@ export function TaskFormModal({ opened, onClose, task, onUnschedule, initialPare
     // Handler for mobile recurrence warning
     const handleMobileRecurrenceClick = () => {
         if (isMobile) {
-            addToast('現時点でモバイル版は繰り返し機能に対応していません', 'warning');
+            addToast('繰り返し機能は現在モバイル版では対応しておりません。PC版でのご利用をお願いいたします。', 'warning');
         }
     };
 
@@ -166,24 +165,30 @@ export function TaskFormModal({ opened, onClose, task, onUnschedule, initialPare
             // Build recurrence object based on preset or custom settings
             let recurrence: Recurrence | null = null;
 
-            if (values.recurrencePreset === 'daily') {
-                recurrence = { type: 'daily', interval: 1 };
-            } else if (values.recurrencePreset === 'weekdays') {
-                recurrence = { type: 'weekly', interval: 1, days_of_week: [1, 2, 3, 4, 5] };
-            } else if (values.recurrencePreset === 'weekly') {
-                // Default to current day of week if deadline is set
-                const dayOfWeek = values.deadline ? values.deadline.getDay() : new Date().getDay();
-                recurrence = { type: 'weekly', interval: 1, days_of_week: [dayOfWeek] };
-            } else if (values.recurrencePreset === 'monthly') {
-                recurrence = { type: 'monthly', interval: 1 };
-            } else if (values.recurrencePreset === 'custom') {
-                recurrence = {
-                    type: values.customType,
-                    interval: values.customInterval,
-                };
-                // Add days_of_week only for weekly custom recurrence
-                if (values.customType === 'weekly' && values.customDaysOfWeek.length > 0) {
-                    recurrence.days_of_week = values.customDaysOfWeek;
+            // On mobile, preserve existing recurrence without allowing changes
+            if (isMobile && task?.recurrence) {
+                recurrence = task.recurrence as unknown as Recurrence;
+            } else if (!isMobile) {
+                // PC version: allow full recurrence management
+                if (values.recurrencePreset === 'daily') {
+                    recurrence = { type: 'daily', interval: 1 };
+                } else if (values.recurrencePreset === 'weekdays') {
+                    recurrence = { type: 'weekly', interval: 1, days_of_week: [1, 2, 3, 4, 5] };
+                } else if (values.recurrencePreset === 'weekly') {
+                    // Default to current day of week if deadline is set
+                    const dayOfWeek = values.deadline ? values.deadline.getDay() : new Date().getDay();
+                    recurrence = { type: 'weekly', interval: 1, days_of_week: [dayOfWeek] };
+                } else if (values.recurrencePreset === 'monthly') {
+                    recurrence = { type: 'monthly', interval: 1 };
+                } else if (values.recurrencePreset === 'custom') {
+                    recurrence = {
+                        type: values.customType,
+                        interval: values.customInterval,
+                    };
+                    // Add days_of_week only for weekly custom recurrence
+                    if (values.customType === 'weekly' && values.customDaysOfWeek.length > 0) {
+                        recurrence.days_of_week = values.customDaysOfWeek;
+                    }
                 }
             }
 
@@ -398,14 +403,43 @@ export function TaskFormModal({ opened, onClose, task, onUnschedule, initialPare
                             <Repeat size={16} /> 繰り返し
                         </Text>
 
-                        <Box
-                            onClick={handleMobileRecurrenceClick}
-                            style={{
-                                cursor: isMobile ? 'pointer' : 'default',
-                                opacity: isMobile ? 0.6 : 1,
-                                pointerEvents: isMobile ? 'all' : 'auto',
-                            }}
-                        >
+                        {isMobile ? (
+                            <div
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleMobileRecurrenceClick();
+                                }}
+                                style={{
+                                    cursor: 'pointer',
+                                    position: 'relative'
+                                }}
+                            >
+                                <Select
+                                    placeholder="繰り返しパターンを選択"
+                                    data={[
+                                        { value: 'none', label: 'なし' },
+                                        { value: 'daily', label: '毎日' },
+                                        { value: 'weekdays', label: '平日 (月〜金)' },
+                                        { value: 'weekly', label: '毎週' },
+                                        { value: 'monthly', label: '毎月' },
+                                        { value: 'custom', label: 'カスタム...' },
+                                    ]}
+                                    value={form.values.recurrencePreset}
+                                    onChange={() => { }}
+                                    allowDeselect={false}
+                                    size="sm"
+                                    readOnly
+                                    styles={{
+                                        input: {
+                                            cursor: 'pointer',
+                                            opacity: 0.6,
+                                            pointerEvents: 'none'
+                                        }
+                                    }}
+                                />
+                            </div>
+                        ) : (
                             <Select
                                 placeholder="繰り返しパターンを選択"
                                 data={[
@@ -418,19 +452,13 @@ export function TaskFormModal({ opened, onClose, task, onUnschedule, initialPare
                                 ]}
                                 value={form.values.recurrencePreset}
                                 onChange={(value) => {
-                                    if (!isMobile) {
-                                        form.setFieldValue('recurrencePreset', value || 'none');
-                                        setShowCustomRecurrence(value === 'custom');
-                                    }
+                                    form.setFieldValue('recurrencePreset', value || 'none');
+                                    setShowCustomRecurrence(value === 'custom');
                                 }}
                                 allowDeselect={false}
                                 size="sm"
-                                disabled={isMobile}
-                                styles={isMobile ? {
-                                    input: { cursor: 'pointer' }
-                                } : undefined}
                             />
-                        </Box>
+                        )}
 
 
                         {showCustomRecurrence && !isMobile && (
