@@ -7,6 +7,7 @@ import { anchorLabel, flatten } from '../../shared/templates.ts';
 import type { Category, Template } from '../../shared/types.ts';
 import { api, useCategories, useCategoryWrite, useSettings, useTemplates, useTemplateWrite, useWrite, type AppSettings } from '../api.ts';
 import { PageHeader } from '../components/Layout.tsx';
+import { NOTE_FONTS, noteFontPx, useNoteFont } from '../noteFont.ts';
 import { setThemePref, useThemePref, type ThemePref } from '../theme.ts';
 import { toast } from '../toast.ts';
 import { CARD, cx } from '../util.ts';
@@ -77,6 +78,7 @@ export function SettingsPage() {
 
       <h2 className={H2}>表示</h2>
       <ThemeSetting />
+      <NoteFontSetting />
     </div>
   );
 }
@@ -366,6 +368,38 @@ function ThemeSetting() {
         ))}
       </div>
       <p className="mt-2.5 text-xs text-zinc-400">この端末だけの設定（スマホと PC で別々に選べる）。</p>
+    </div>
+  );
+}
+
+/** ノートを開いたときの文字の大きさ（design 7-13・端末ごと） */
+function NoteFontSetting() {
+  const [font, setFont] = useNoteFont();
+  const px = noteFontPx(font);
+  return (
+    <div className={cx(CARD, 'mt-3 p-4')}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-sm">ノートの文字</span>
+        {NOTE_FONTS.map(([v, label]) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => setFont(v)}
+            className={cx(
+              'rounded-md border px-3 py-1.5 text-sm',
+              font === v
+                ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300'
+                : 'border-zinc-300 text-zinc-600 dark:border-zinc-700 dark:text-zinc-300',
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <p className="mt-3 leading-relaxed" style={{ fontSize: px.body }}>
+        思いついたことを、そのまま書いておく。
+      </p>
+      <p className="mt-1.5 text-xs text-zinc-400">開いたノートの本文と項目の大きさ（タイトルは少し大きく）。この端末だけの設定。</p>
     </div>
   );
 }

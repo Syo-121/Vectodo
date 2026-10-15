@@ -9,6 +9,7 @@ import type { Note, NoteItem } from '../../shared/types.ts';
 import { api, useNoteLabels, useNotes } from '../api.ts';
 import { PageHeader } from '../components/Layout.tsx';
 import { useKeyboardViewport, useMediaQuery } from '../media.ts';
+import { noteFontPx, useNoteFont } from '../noteFont.ts';
 import { useOffline } from '../offline.ts';
 import { enqueue, useOutbox, withPendingChecks } from '../outbox.ts';
 import { useLocalState } from '../storage.ts';
@@ -259,10 +260,11 @@ function NoteCard({ note: n, onOpen }: { note: Note; onOpen: () => void }) {
   );
 }
 
-/** チェックリストの項目の見た目。項目は折り返すので、チェックと × は1行目の高さに合わせる */
-const ITEM = 'min-w-0 flex-1 bg-transparent py-1 text-[17px] leading-snug outline-none';
-const CHECK = 'mt-[7px] size-[18px] shrink-0 accent-indigo-600';
-const REMOVE = 'shrink-0 px-1.5 py-1 text-[17px] leading-snug text-zinc-400 opacity-60 group-hover:opacity-100';
+/** チェックリストの項目の見た目。項目は折り返すので、チェックと × は1行目の高さに合わせる。
+ * 文字の大きさは開いたノートの CSS 変数 --note-fs（設定の 小・中・大＝noteFont.ts） */
+const ITEM = 'min-w-0 flex-1 bg-transparent py-1 text-[length:var(--note-fs)] leading-snug outline-none';
+const CHECK = 'mt-[calc(var(--note-fs)*0.6875-5px)] size-[18px] shrink-0 accent-indigo-600';
+const REMOVE = 'shrink-0 px-1.5 py-1 text-[length:var(--note-fs)] leading-snug text-zinc-400 opacity-60 group-hover:opacity-100';
 
 /** 並べ替えで、指が上下の端からこの距離に入ったらノートを送る */
 const EDGE = 48;
@@ -337,6 +339,8 @@ function NoteEditor({
   const scrollRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   const keyboard = useKeyboardViewport();
+  const [font] = useNoteFont();
+  const fs = noteFontPx(font);
   // つながっていないときは読むだけ（端末に残しておいた中身を見せている・design 7-9）。チェックだけは溜めておける
   const ro = useOffline() !== null;
   const checkOffline = (i: number, done: boolean) => {
@@ -600,13 +604,18 @@ function NoteEditor({
       style={keyboard ? { top: keyboard.top, height: keyboard.height, bottom: 'auto' } : undefined}
       onClick={close}
     >
-      {/* スマホは1枚の紙（枠を付けず、色はノートの色）・広い画面は真ん中の大きめのカード */}
+      {/* スマホは1枚の紙（枠を付けず、色はノートの色）・広い画面は真ん中の大きめのカード。
+          ダークの色は半透明なので、不透明な地の上に重ねる（下の一覧が透けてタイトルが読めなくなる） */}
+      <div
+        className="flex h-full w-full flex-col overflow-hidden bg-white md:h-auto md:max-h-[86vh] md:max-w-2xl md:rounded-2xl md:shadow-2xl dark:bg-zinc-900"
+        style={{ '--note-fs': `${fs.body}px`, '--note-title': `${fs.title}px` } as React.CSSProperties}
+        onClick={(e) => e.stopPropagation()}
+      >
       <div
         className={cx(
-          'flex h-full w-full flex-col overflow-hidden md:h-auto md:max-h-[86vh] md:max-w-2xl md:rounded-2xl md:border md:shadow-2xl',
-          d.color ? BG[d.color] : 'bg-white md:border-zinc-200 dark:bg-zinc-900 dark:md:border-zinc-800',
+          'flex min-h-0 flex-1 flex-col md:rounded-2xl md:border',
+          d.color ? BG[d.color] : 'md:border-zinc-200 dark:md:border-zinc-800',
         )}
-        onClick={(e) => e.stopPropagation()}
       >
         {/* 上: 戻る（スマホ）・固定・アーカイブ */}
         <div className="flex shrink-0 items-center gap-1 px-1.5 pt-1.5 md:px-3 md:pt-3">
@@ -663,7 +672,7 @@ function NoteEditor({
               else insertAfter(d.items.length - 1);
             }}
             placeholder="タイトル"
-            className="w-full bg-transparent py-1 text-xl leading-snug font-semibold outline-none placeholder:text-zinc-400/80"
+            className="w-full bg-transparent py-1 text-[length:var(--note-title)] leading-snug font-semibold outline-none placeholder:text-zinc-400/80"
           />
 
           {d.kind === 'text' ? (
@@ -675,7 +684,7 @@ function NoteEditor({
               onChange={(e) => set({ body: e.target.value })}
               placeholder="メモ"
               rows={3}
-              className="mt-1 w-full bg-transparent text-[17px] leading-relaxed outline-none placeholder:text-zinc-400/80"
+              className="mt-1 w-full bg-transparent text-[length:var(--note-fs)] leading-relaxed outline-none placeholder:text-zinc-400/80"
             />
           ) : (
             <div className="mt-1 space-y-0.5">
@@ -695,7 +704,7 @@ function NoteEditor({
                       onPointerMove={moveDrag}
                       onPointerUp={endDrag}
                       onPointerCancel={endDrag}
-                      className="-mr-1 shrink-0 cursor-grab touch-none px-0.5 pt-[9px] pb-1 text-zinc-400 active:cursor-grabbing"
+                      className="-mr-1 shrink-0 cursor-grab touch-none px-0.5 pt-[calc(var(--note-fs)*0.6875-3px)] pb-1 text-zinc-400 active:cursor-grabbing"
                       title="押したまま上下で並べ替え"
                       aria-hidden="true"
                     >
@@ -850,6 +859,7 @@ function NoteEditor({
             閉じる
           </button>
         </div>
+      </div>
       </div>
     </div>
   );
