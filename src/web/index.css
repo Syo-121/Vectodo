@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+/* ダークモードはシステム設定ではなく html の .dark クラスで決める（設定画面で選べる・src/web/theme.ts） */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", system-ui, sans-serif;
+}
+
+/* スクロールバーが出るページと出ないページで中身（上のタブ）が左右にずれないよう、バーの幅を常に確保する */
+html {
+  scrollbar-gutter: stable;
+  /* ブラウザ標準の部品（ドロップダウンの一覧・時刻の入力・カレンダーアイコンなど）もテーマに合わせる */
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+}
+
+/* ドロップダウンの選択肢。白い一覧に白い文字が乗って読めなくなるのを防ぐ（color-scheme が効かない環境の保険） */
+select option {
+  background-color: #ffffff;
+  color: #18181b;
+}
+.dark select option {
+  background-color: #18181b;
+  color: #f4f4f5;
+}
+
+html,
+body {
+  @apply bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* 中でスクロールする場所のバー。
+   縦（詳細パネルなど）は消す（ホイール・トラックパッド・スワイプでスクロールできる）。
+   横（カンバンなど）はマウスで動かせないと困るので、細く薄く出す */
+.scroll-hidden {
+  scrollbar-width: none;
+}
+.scroll-hidden::-webkit-scrollbar {
+  display: none;
+}
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(161 161 170 / 0.35) transparent;
+}
+
+/* iPhone の下端（ホームバー）に被らないように */
+.pb-safe {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 0.25rem);
+}
+.bottom-safe {
+  bottom: calc(env(safe-area-inset-bottom) + 5rem);
+}
+
+input[type="date"],
+input[type="time"] {
+  min-height: 2.25rem;
+}

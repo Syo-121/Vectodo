@@ -1,0 +1,16 @@
+{
+  "port": 5180,
+  "dbPath": "data/tasks.db",
+  "backupDir": null,
+  "backupKeepDays": 14,
+  "timezone": "Asia/Tokyo",
+  "allowedHosts": [
+    "localhost",
+    "127.0.0.1"
+  ],
+  "gcal": {
+    "clientFile": "~/.config/task-app/google-client.json",
+    "tokenFile": "~/.config/task-app/google-token.json",
+    "appUrl": null
+  }
+}

@@ -1,0 +1,20 @@
+# 常駐用の systemd ユニット。<ユーザー名> と <置き場所> を書き換えて /etc/systemd/system/task-app.service に置き、
+#   sudo systemctl daemon-reload && sudo systemctl enable --now task-app
+[Unit]
+Description=task-app（Vectodo: タスク管理アプリ・UI＋API＋MCP。127.0.0.1:5180）
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=<ユーザー名>
+WorkingDirectory=<置き場所>
+Environment=NODE_OPTIONS=--disable-warning=ExperimentalWarning
+ExecStart=<置き場所>/node_modules/.bin/tsx src/server/main.ts
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

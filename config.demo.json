@@ -1,0 +1,15 @@
+{
+  "port": 5190,
+  "dbPath": "data/demo.db",
+  "backupDir": null,
+  "timezone": "Asia/Tokyo",
+  "allowedHosts": [
+    "localhost",
+    "127.0.0.1"
+  ],
+  "gcal": {
+    "clientFile": "data/demo-no-google-client.json",
+    "tokenFile": "data/demo-no-google-token.json",
+    "appUrl": null
+  }
+}

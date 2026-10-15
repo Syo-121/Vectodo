@@ -1,0 +1,40 @@
+{
+  "name": "task-app",
+  "description": "依存関係を登録できる自分用のタスク管理アプリ（PWA・Google カレンダー書き出し・MCP）",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "test": "NODE_OPTIONS=--disable-warning=ExperimentalWarning vitest run",
+    "start": "NODE_OPTIONS=--disable-warning=ExperimentalWarning tsx src/server/main.ts",
+    "dev": "NODE_OPTIONS=--disable-warning=ExperimentalWarning tsx watch src/server/main.ts",
+    "typecheck": "tsc -p .",
+    "build": "vite build",
+    "dev:web": "vite",
+    "demo:seed": "NODE_OPTIONS=--disable-warning=ExperimentalWarning tsx scripts/seed-demo.ts data/demo.db",
+    "demo": "TASK_APP_CONFIG=config.demo.json NODE_OPTIONS=--disable-warning=ExperimentalWarning tsx src/server/main.ts"
+  },
+  "type": "module",
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@hono/node-server": "^2.1.4",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@tanstack/react-query": "^5.104.2",
+    "hono": "^4.13.13",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router": "^8.4.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.4"
+  }
+}
