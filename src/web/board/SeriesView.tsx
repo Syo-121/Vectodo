@@ -1,10 +1,13 @@
 // シリーズの依存の図（v4・design 7-12）。シリーズ＝親タスク1つ。子どうしの依存を DAG で描き、
 // 親をまたぐ線の先は「外」のノード（点線の枠）として出す。スマホは上→下、広い画面は左→右に流す。
 // ノードの ● を押したまま後にやるタスクの上で離すと依存ができ、線を押すと外せる。上の欄から親に子タスクを足せる。
+// 図の上でした操作は「戻す」「やり直す」（Ctrl+Z・Ctrl+Y）で取り消せる。
 
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { isOpen, STATUS_LABEL } from '../../shared/constants.ts';
+import { formatTaskCode } from '../../shared/ids.ts';
 import type { Category, SeriesGraph, SeriesSummary, Task } from '../../shared/types.ts';
 import { api, useSeries, useSeriesList, useWrite } from '../api.ts';
 import { useWideScreen } from '../media.ts';
@@ -60,6 +63,29 @@ function arrow(tip: { x: number; y: number }, dir: Dir): string {
   return dir === 'down'
     ? `${x - 4.5},${y - 7} ${x + 4.5},${y - 7} ${x},${y}`
     : `${x - 7},${y - 4.5} ${x - 7},${y + 4.5} ${x},${y}`;
+}
+
+/** 図の上でした操作（戻す・やり直すのため）。add は足した子タスク、chain は一列につないで増えた線 */
+type Act =
+  | { kind: 'link'; from: number; to: number }
+  | { kind: 'unlink'; from: number; to: number }
+  | { kind: 'add'; id: number; title: string }
+  | { kind: 'chain'; edges: Edge[] };
+
+function actLabel(a: Act): string {
+  const c = formatTaskCode;
+  if (a.kind === 'link') return `${c(a.from)} → ${c(a.to)} の線`;
+  if (a.kind === 'unlink') return `${c(a.from)} → ${c(a.to)} の線を外したこと`;
+  if (a.kind === 'add') return `${c(a.id)}「${a.title}」を足したこと`;
+  return `一列につないだ ${a.edges.length} 本`;
+}
+
+/** 番号を付け替える（やり直しで足し直した子タスクは新しい番号になるので、後の操作もそちらを向ける） */
+function remap(a: Act, from: number, to: number): Act {
+  const m = (n: number) => (n === from ? to : n);
+  if (a.kind === 'link' || a.kind === 'unlink') return { ...a, from: m(a.from), to: m(a.to) };
+  if (a.kind === 'add') return a;
+  return { ...a, edges: a.edges.map((e) => ({ from: m(e.from), to: m(e.to) })) };
 }
 
 export function SeriesView({ today, categories }: { today: string; categories: Map<number, Category> }) {
@@ -165,6 +191,73 @@ function GraphPanel({
   const missing = graph.parent ? missingChain(graph.nodes, graph.edges) : 0;
   const parent = graph.parent;
 
+  // 戻す・やり直す: 図の上でした操作（つなぐ・外す・子を足す・一列につなぐ）を逆に当てる。シリーズを替えると消える
+  const qc = useQueryClient();
+  const [hist, setHist] = useState<{ undo: Act[]; redo: Act[] }>({ undo: [], redo: [] });
+  const [busy, setBusy] = useState(false);
+  const record = (a: Act) => setHist((h) => ({ undo: [...h.undo, a], redo: [] }));
+  /** 操作を、戻す（undo）かやり直す（redo）向きに当てる。足し直した子は新しい番号で返す */
+  const apply = async (a: Act, dir: 'undo' | 'redo'): Promise<Act> => {
+    const forward = dir === 'redo';
+    if (a.kind === 'link' || a.kind === 'unlink') {
+      const add = (a.kind === 'link') === forward;
+      await (add ? api.addDep(a.to, a.from) : api.removeDep(a.to, a.from));
+      return a;
+    }
+    if (a.kind === 'chain') {
+      for (const e of a.edges) await (forward ? api.addDep(e.to, e.from) : api.removeDep(e.to, e.from));
+      return a;
+    }
+    if (!forward) {
+      await api.remove(a.id);
+      return a;
+    }
+    const t = await api.create({ title: a.title, parentId: id });
+    return { ...a, id: t.id };
+  };
+  const step = async (dir: 'undo' | 'redo') => {
+    const stack = dir === 'undo' ? hist.undo : hist.redo;
+    const a = stack[stack.length - 1];
+    if (!a || busy) return;
+    setBusy(true);
+    try {
+      const done = await apply(a, dir);
+      setHist((h) => {
+        const moved = done.kind === 'add' && a.kind === 'add' && done.id !== a.id;
+        if (dir === 'undo') return { undo: h.undo.slice(0, -1), redo: [...h.redo, done] };
+        const rest = h.redo.slice(0, -1).map((x) => (moved ? remap(x, (a as { id: number }).id, (done as { id: number }).id) : x));
+        return { undo: [...h.undo, done], redo: rest };
+      });
+      toast(`${dir === 'undo' ? '戻した' : 'やり直した'}: ${actLabel(done)}`);
+    } catch (e) {
+      // 当てられなかった（ほかの画面で先に変わっていた など）ものは捨てる
+      setHist((h) => (dir === 'undo' ? { ...h, undo: h.undo.slice(0, -1) } : { ...h, redo: h.redo.slice(0, -1) }));
+      toast(`${dir === 'undo' ? '戻せなかった' : 'やり直せなかった'}: ${e instanceof Error ? e.message : String(e)}`, 'error');
+    } finally {
+      setBusy(false);
+      void qc.invalidateQueries({ queryKey: ['tasks'] });
+    }
+  };
+  const stepRef = useRef(step);
+  stepRef.current = step;
+  // Ctrl+Z で戻す・Ctrl+Y（Ctrl+Shift+Z）でやり直す（Mac は ⌘）。文字を打っている欄の中では、その欄の取り消しのまま
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      if ((e.target as HTMLElement).closest('input, textarea, select, [contenteditable]')) return;
+      const k = e.key.toLowerCase();
+      if (k === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        void stepRef.current('undo');
+      } else if (k === 'y' || (k === 'z' && e.shiftKey)) {
+        e.preventDefault();
+        void stepRef.current('redo');
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   // 広い画面（左→右）は横に長くなるので、マウスで背景をつかんで横に動かせるようにし、
   // 開いたときは最初の未完了のところまで送っておく（終わった工程が多いシリーズ向け。手前の工程の端は見せて、左にもあると分かるように）
   const scroller = useRef<HTMLDivElement>(null);
@@ -200,7 +293,7 @@ function GraphPanel({
   };
   const connect = (from: number, to: number) => {
     if (graph.edges.some((x) => x.from === from && x.to === to)) return toast('もうつながっている');
-    addDep.mutate({ from, to });
+    addDep.mutate({ from, to }, { onSuccess: () => record({ kind: 'link', from, to }) });
   };
   const startLink = (t: Task, e: React.PointerEvent<HTMLElement>) => {
     if (e.button !== 0) return;
@@ -259,12 +352,23 @@ function GraphPanel({
   const onEdge = (e: Edge) => {
     const a = all.get(e.from);
     const b = all.get(e.to);
-    if (confirm(`${a?.code}「${a?.title}」→ ${b?.code}「${b?.title}」の線を外す？`)) rmDep.mutate(e);
+    if (confirm(`${a?.code}「${a?.title}」→ ${b?.code}「${b?.title}」の線を外す？`)) {
+      rmDep.mutate(e, { onSuccess: () => record({ kind: 'unlink', from: e.from, to: e.to }) });
+    }
   };
   const onChain = () => {
     const n = graph.nodes.filter((t) => t.status !== 'canceled').length;
     if (!confirm(`子 ${n} 件を並び順どおりに一列につなぐ？（線を ${missing} 本足す）`)) return;
-    chain.mutate(undefined, { onSuccess: (r) => toast(`${r.added} 本つないだ`) });
+    const before = graph.edges;
+    chain.mutate(undefined, {
+      onSuccess: async (r) => {
+        toast(`${r.added} 本つないだ`);
+        // 増えた線を覚えて、戻すときに外せるようにする
+        const now = await api.series(id);
+        const added = now.edges.filter((e) => !before.some((b) => b.from === e.from && b.to === e.to));
+        if (added.length > 0) record({ kind: 'chain', edges: added });
+      },
+    });
   };
 
   const width = layout.slots && layout.layers ? place({ layer: layout.layers - 1, slot: layout.slots - 1 }, dir).x + g.w : 0;
@@ -299,12 +403,16 @@ function GraphPanel({
         </div>
       )}
 
-      {parent && <AddChild parentId={parent.id} />}
+      {parent && <AddChild parentId={parent.id} onAdded={(t) => record({ kind: 'add', id: t.id, title: t.title })} />}
 
       {graph.nodes.length > 0 && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-2 text-xs text-zinc-500">
           <span>
             {dir === 'right' ? '右' : '下'}の <span className="text-indigo-500">●</span> を、後にやるタスクまでドラッグするとつながる。線を押すと外せる。
+          </span>
+          <span className="ml-auto flex gap-1.5">
+            <UndoButton label="↶ 戻す" keys="Ctrl+Z" act={hist.undo.at(-1)} busy={busy} onClick={() => void step('undo')} />
+            <UndoButton label="↷ やり直す" keys="Ctrl+Y" act={hist.redo.at(-1)} busy={busy} onClick={() => void step('redo')} />
           </span>
           {/* まだ線が1本も無いシリーズだけ（枝分かれさせた後に押して一列にしてしまわないように） */}
           {missing > 0 && graph.edges.length === 0 && (
@@ -414,14 +522,22 @@ function GraphPanel({
 }
 
 /** このシリーズ（親）に子タスクを足す。タイトルだけで Enter、続けて何件でも */
-function AddChild({ parentId }: { parentId: number }) {
+function AddChild({ parentId, onAdded }: { parentId: number; onAdded: (t: Task) => void }) {
   const [title, setTitle] = useState('');
   const input = useRef<HTMLInputElement>(null);
   const create = useWrite(api.create);
   const submit = () => {
     const t = title.trim();
     if (!t) return;
-    create.mutate({ title: t, parentId }, { onSuccess: (task) => toast(`${task.code} を足した`) });
+    create.mutate(
+      { title: t, parentId },
+      {
+        onSuccess: (task) => {
+          toast(`${task.code} を足した`);
+          onAdded(task);
+        },
+      },
+    );
     setTitle('');
     input.current?.focus();
   };
@@ -449,6 +565,21 @@ function AddChild({ parentId }: { parentId: number }) {
         追加
       </button>
     </form>
+  );
+}
+
+/** 戻す・やり直すのボタン。押すと何が戻るかを title に出す */
+function UndoButton({ label, keys, act, busy, onClick }: { label: string; keys: string; act: Act | undefined; busy: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!act || busy}
+      title={act ? `${label.slice(2)}: ${actLabel(act)}（${keys}）` : `${label.slice(2)}ものは無い`}
+      className="rounded-full border border-zinc-300 px-2.5 py-1 text-xs text-zinc-700 disabled:opacity-35 dark:border-zinc-700 dark:text-zinc-200"
+    >
+      {label}
+    </button>
   );
 }
 
