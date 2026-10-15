@@ -4,15 +4,15 @@
 
 A self-hosted task manager with task dependencies, a phone-friendly PWA, one-way Google Calendar export, and a built-in MCP server for AI assistants. The UI is in Japanese.
 
-<p>
-  <img src="docs/images/today.png" alt="今日の画面（スマホ）" width="260">
-  <img src="docs/images/series.png" alt="シリーズの依存の図（PC）" width="540">
-</p>
+<img src="docs/images/series.png" alt="シリーズの依存の図（PC）" width="100%">
 
 <p>
-  <img src="docs/images/place.png" alt="時間を選んでタスクを置く（PC）" width="540">
-  <img src="docs/images/note-open.png" alt="ノート（スマホ）" width="260">
+  <img src="docs/images/today.png" alt="今日の画面（スマホ）" width="32%">
+  <img src="docs/images/series-phone.png" alt="シリーズの依存の図（スマホ）" width="32%">
+  <img src="docs/images/note-open.png" alt="ノート（スマホ）" width="32%">
 </p>
+
+<img src="docs/images/place.png" alt="時間を選んでタスクを置く（PC）" width="100%">
 
 ※ 画面はすべて架空のデモデータです．
 
