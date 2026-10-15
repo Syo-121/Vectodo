@@ -599,15 +599,20 @@ function NoteEditor({
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-stretch justify-center md:items-start md:bg-black/40 md:px-4 md:pt-[7vh]"
-      // スマホでキーボードが出たら、隠れていない範囲に収める（下の道具と書いている行がキーボードの裏に入らない）
-      style={keyboard ? { top: keyboard.top, height: keyboard.height, bottom: 'auto' } : undefined}
+      // スマホは画面全体を不透明な地で覆う（キーボードのまわりや後ろに、下の一覧が透けないように）。広い画面は暗い背景
+      className="fixed inset-0 z-40 bg-white md:flex md:items-start md:justify-center md:bg-black/40 md:px-4 md:pt-[7vh] dark:bg-zinc-900 md:dark:bg-black/40"
       onClick={close}
     >
+      {d.color && <div className={cx('absolute inset-0 md:hidden', BG[d.color])} />}
+      <div
+        className="absolute inset-x-0 top-0 flex h-full flex-col md:static md:h-auto md:w-full md:max-w-2xl"
+        // スマホでキーボードが出たら、書くところは隠れていない範囲に収める（下の道具と書いている行がキーボードの裏に入らない）。地は画面全体のまま
+        style={keyboard ? { top: keyboard.top, height: keyboard.height } : undefined}
+      >
       {/* スマホは1枚の紙（枠を付けず、色はノートの色）・広い画面は真ん中の大きめのカード。
           ダークの色は半透明なので、不透明な地の上に重ねる（下の一覧が透けてタイトルが読めなくなる） */}
       <div
-        className="flex h-full w-full flex-col overflow-hidden bg-white md:h-auto md:max-h-[86vh] md:max-w-2xl md:rounded-2xl md:shadow-2xl dark:bg-zinc-900"
+        className="flex h-full w-full flex-col overflow-hidden bg-white md:h-auto md:max-h-[86vh] md:rounded-2xl md:shadow-2xl dark:bg-zinc-900"
         style={{ '--note-fs': `${fs.body}px`, '--note-title': `${fs.title}px` } as React.CSSProperties}
         onClick={(e) => e.stopPropagation()}
       >
@@ -649,7 +654,8 @@ function NoteEditor({
           )}
         </div>
 
-        {/* 書くところ。何も無いところを押すと、続きから書ける */}
+        {/* 書くところ。何も無いところを押すと、続きから書ける。
+            縦に並べているので、あふれたときに欄が縮まないよう中身は shrink-0（キーボードが出るとタイトルがつぶれて消えていた） */}
         <div
           ref={scrollRef}
           data-note-scroll
@@ -672,7 +678,7 @@ function NoteEditor({
               else insertAfter(d.items.length - 1);
             }}
             placeholder="タイトル"
-            className="w-full bg-transparent py-1 text-[length:var(--note-title)] leading-snug font-semibold outline-none placeholder:text-zinc-400/80"
+            className="w-full shrink-0 bg-transparent py-1 text-[length:var(--note-title)] leading-snug font-semibold outline-none placeholder:text-zinc-400/80"
           />
 
           {d.kind === 'text' ? (
@@ -684,10 +690,10 @@ function NoteEditor({
               onChange={(e) => set({ body: e.target.value })}
               placeholder="メモ"
               rows={3}
-              className="mt-1 w-full bg-transparent text-[length:var(--note-fs)] leading-relaxed outline-none placeholder:text-zinc-400/80"
+              className="mt-1 w-full shrink-0 bg-transparent text-[length:var(--note-fs)] leading-relaxed outline-none placeholder:text-zinc-400/80"
             />
           ) : (
-            <div className="mt-1 space-y-0.5">
+            <div className="mt-1 shrink-0 space-y-0.5">
               {openItems.map((x) => (
                 <div
                   key={x.i}
@@ -783,7 +789,7 @@ function NoteEditor({
           )}
 
           {d.labels.length > 0 && (
-            <div className="mt-4 flex flex-wrap gap-1.5">
+            <div className="mt-4 flex shrink-0 flex-wrap gap-1.5">
               {d.labels.map((l) => (
                 <span key={l} className="flex items-center gap-1 rounded-full bg-black/5 px-2.5 py-0.5 text-xs text-zinc-600 dark:bg-white/10 dark:text-zinc-300">
                   {l}
@@ -827,7 +833,8 @@ function NoteEditor({
         {panel === 'label' && <LabelPicker choices={labelChoices} selected={d.labels} onChange={(labels) => set({ labels })} />}
 
         {/* 下: チェックリスト⇔文章・色・ラベル／編集した時刻／削除（広い画面は「閉じる」も） */}
-        <div className="pb-safe flex shrink-0 items-center gap-0.5 px-1.5 pt-1 md:px-3 md:pb-3">
+        {/* キーボードが出ている間は、下端（ホームバー）の余白は要らない（キーボードが覆っている） */}
+        <div className={cx('flex shrink-0 items-center gap-0.5 px-1.5 pt-1 md:px-3 md:pb-3', keyboard ? 'pb-1' : 'pb-safe')}>
           {ro ? (
             <span className="px-3 py-3 text-xs text-amber-700 dark:text-amber-300">📴 つながっていない: チェックだけできる（つながったら送る）</span>
           ) : (
@@ -859,6 +866,7 @@ function NoteEditor({
             閉じる
           </button>
         </div>
+      </div>
       </div>
       </div>
     </div>
