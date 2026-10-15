@@ -260,9 +260,9 @@ function NoteCard({ note: n, onOpen }: { note: Note; onOpen: () => void }) {
 }
 
 /** チェックリストの項目の見た目。項目は折り返すので、チェックと × は1行目の高さに合わせる */
-const ITEM = 'min-w-0 flex-1 bg-transparent py-1 text-[15px] leading-snug outline-none';
-const CHECK = 'mt-[9px] shrink-0';
-const REMOVE = 'shrink-0 px-1 py-1 text-[15px] leading-snug text-zinc-400 opacity-60 group-hover:opacity-100';
+const ITEM = 'min-w-0 flex-1 bg-transparent py-1 text-[17px] leading-snug outline-none';
+const CHECK = 'mt-[7px] size-[18px] shrink-0 accent-indigo-600';
+const REMOVE = 'shrink-0 px-1.5 py-1 text-[17px] leading-snug text-zinc-400 opacity-60 group-hover:opacity-100';
 
 /** 並べ替えで、指が上下の端からこの距離に入ったらノートを送る */
 const EDGE = 48;
@@ -575,48 +575,96 @@ function NoteEditor({
   const openItems = d.items.map((x, i) => ({ ...x, i })).filter((x) => !x.done);
   const doneItems = d.items.map((x, i) => ({ ...x, i })).filter((x) => x.done);
   const labelChoices = [...new Set([...allLabels, ...d.labels])].sort();
-  const tool = 'flex items-center rounded-md px-2 py-1.5 text-sm text-zinc-600 hover:bg-black/5 dark:text-zinc-300 dark:hover:bg-white/10';
+  /** 何も無いところを押したら、続きを書けるようにする（文章は末尾へ・チェックリストは最後の項目へ） */
+  const writeOn = () => {
+    if (ro) return;
+    if (d.kind === 'text') {
+      const el = bodyRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    } else if (openItems.length > 0) {
+      setFocusAt({ i: openItems[openItems.length - 1]!.i, at: 'end' });
+    } else {
+      insertAfter(d.items.length - 1);
+    }
+  };
+  const icon =
+    'flex size-11 shrink-0 items-center justify-center rounded-full text-[19px] text-zinc-600 hover:bg-black/5 disabled:opacity-40 dark:text-zinc-300 dark:hover:bg-white/10';
+  const edited = note ? `編集 ${note.updatedAt.slice(5, 16).replace('T', ' ').replace('-', '/')}` : '';
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-stretch justify-center bg-black/40 md:items-start md:pt-[8vh]"
+      className="fixed inset-0 z-40 flex items-stretch justify-center md:items-start md:bg-black/40 md:px-4 md:pt-[7vh]"
       // スマホでキーボードが出たら、隠れていない範囲に収める（下の道具と書いている行がキーボードの裏に入らない）
       style={keyboard ? { top: keyboard.top, height: keyboard.height, bottom: 'auto' } : undefined}
       onClick={close}
     >
+      {/* スマホは1枚の紙（枠を付けず、色はノートの色）・広い画面は真ん中の大きめのカード */}
       <div
-        className="pb-safe flex h-full w-full flex-col overflow-hidden bg-white shadow-xl md:h-auto md:max-h-[84vh] md:max-w-xl md:rounded-xl dark:bg-zinc-900"
+        className={cx(
+          'flex h-full w-full flex-col overflow-hidden md:h-auto md:max-h-[86vh] md:max-w-2xl md:rounded-2xl md:border md:shadow-2xl',
+          d.color ? BG[d.color] : 'bg-white md:border-zinc-200 dark:bg-zinc-900 dark:md:border-zinc-800',
+        )}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className={cx('flex min-h-0 flex-1 flex-col border md:rounded-xl', d.color ? BG[d.color] : PLAIN)}>
-        <div ref={scrollRef} data-note-scroll className="flex-1 overflow-y-auto overscroll-contain px-4 pt-4 pb-2">
-          <div className="flex items-start gap-2">
-            <GrowText
-              rows={1}
-              value={d.title}
-              // タイトルは1行のもの（端で折り返すだけ）。Enter で本文・最初の項目へ
-              readOnly={ro}
-              onChange={(e) => set({ title: e.target.value.replace(/\n/g, ' ') })}
-              onKeyDown={(e) => {
-                if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
-                e.preventDefault();
-                if (d.kind === 'text') bodyRef.current?.focus();
-                else if (openItems.length > 0) setFocusAt({ i: openItems[0]!.i, at: 'end' });
-              }}
-              placeholder="タイトル"
-              className="min-w-0 flex-1 bg-transparent py-1 text-lg leading-snug font-semibold outline-none placeholder:text-zinc-400"
-            />
+        {/* 上: 戻る（スマホ）・固定・アーカイブ */}
+        <div className="flex shrink-0 items-center gap-1 px-1.5 pt-1.5 md:px-3 md:pt-3">
+          <button type="button" onClick={close} className={cx(icon, 'md:hidden')} aria-label="戻る" title="戻る">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 12H5M11 5l-7 7 7 7" />
+            </svg>
+          </button>
+          <span className="ml-auto" />
+          <button
+            type="button"
+            disabled={ro}
+            onClick={() => set({ pinned: !d.pinned })}
+            className={cx(icon, !d.pinned && 'grayscale')}
+            aria-label={d.pinned ? '固定を外す' : '固定する'}
+            title={d.pinned ? '固定を外す' : '固定する'}
+          >
+            <span className={d.pinned ? '' : 'opacity-35'}>📌</span>
+          </button>
+          {id.current !== null && (
             <button
               type="button"
               disabled={ro}
-              onClick={() => set({ pinned: !d.pinned })}
-              className={cx('rounded-md px-2 py-1 text-lg', d.pinned ? 'opacity-100' : 'opacity-30 grayscale')}
-              aria-label={d.pinned ? '固定を外す' : '固定する'}
-              title={d.pinned ? '固定を外す' : '固定する'}
+              onClick={archive}
+              className={icon}
+              aria-label={d.archived ? 'アーカイブから戻す' : 'アーカイブ'}
+              title={d.archived ? 'アーカイブから戻す' : 'アーカイブ'}
             >
-              📌
+              <span className="text-[17px]">{d.archived ? '↩︎' : '🗄'}</span>
             </button>
-          </div>
+          )}
+        </div>
+
+        {/* 書くところ。何も無いところを押すと、続きから書ける */}
+        <div
+          ref={scrollRef}
+          data-note-scroll
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-5 pb-4 md:px-7"
+          onClick={(e) => {
+            if ((e.target as HTMLElement).closest('[data-write-on]') || e.target === e.currentTarget) writeOn();
+          }}
+        >
+          <GrowText
+            rows={1}
+            value={d.title}
+            // タイトルは1行のもの（端で折り返すだけ）。Enter で本文・最初の項目へ
+            readOnly={ro}
+            onChange={(e) => set({ title: e.target.value.replace(/\n/g, ' ') })}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
+              e.preventDefault();
+              if (d.kind === 'text') bodyRef.current?.focus();
+              else if (openItems.length > 0) setFocusAt({ i: openItems[0]!.i, at: 'end' });
+              else insertAfter(d.items.length - 1);
+            }}
+            placeholder="タイトル"
+            className="w-full bg-transparent py-1 text-xl leading-snug font-semibold outline-none placeholder:text-zinc-400/80"
+          />
 
           {d.kind === 'text' ? (
             <GrowText
@@ -625,18 +673,18 @@ function NoteEditor({
               readOnly={ro}
               value={d.body}
               onChange={(e) => set({ body: e.target.value })}
-              placeholder="メモを入力…"
-              rows={6}
-              className="mt-2 w-full bg-transparent text-[15px] leading-relaxed outline-none placeholder:text-zinc-400"
+              placeholder="メモ"
+              rows={3}
+              className="mt-1 w-full bg-transparent text-[17px] leading-relaxed outline-none placeholder:text-zinc-400/80"
             />
           ) : (
-            <div className="mt-2 space-y-0.5">
+            <div className="mt-1 space-y-0.5">
               {openItems.map((x) => (
                 <div
                   key={x.i}
                   data-open-item={x.i}
                   className={cx(
-                    'group flex items-start gap-2 rounded-md',
+                    'group flex items-start gap-2.5 rounded-md',
                     !ro && '-ml-2 pl-0.5',
                     dragging === x.i && 'bg-white shadow-md ring-1 ring-black/10 dark:bg-zinc-800 dark:ring-white/15',
                   )}
@@ -647,7 +695,7 @@ function NoteEditor({
                       onPointerMove={moveDrag}
                       onPointerUp={endDrag}
                       onPointerCancel={endDrag}
-                      className="-mr-1 shrink-0 cursor-grab touch-none px-0.5 pt-[7px] pb-1 text-zinc-400 active:cursor-grabbing"
+                      className="-mr-1 shrink-0 cursor-grab touch-none px-0.5 pt-[9px] pb-1 text-zinc-400 active:cursor-grabbing"
                       title="押したまま上下で並べ替え"
                       aria-hidden="true"
                     >
@@ -670,7 +718,7 @@ function NoteEditor({
                     onChange={(e) => changeItem(x.i, e.target.value, e.target.selectionStart)}
                     onKeyDown={itemKeys(x.i, x.text)}
                     placeholder="項目"
-                    className={cx(ITEM, 'placeholder:text-zinc-400')}
+                    className={cx(ITEM, 'placeholder:text-zinc-400/80')}
                   />
                   {!ro && (
                     <button type="button" onClick={() => removeItem(x.i)} className={REMOVE} aria-label="項目を消す">
@@ -683,19 +731,19 @@ function NoteEditor({
                 <button
                   type="button"
                   onClick={() => insertAfter(d.items.length - 1)}
-                  className="flex items-center gap-2 py-1 text-sm text-zinc-500"
+                  className="flex items-center gap-2.5 py-1.5 text-[15px] text-zinc-500"
                 >
-                  ＋ 項目を追加
+                  <span className="w-[18px] text-center text-lg leading-none">＋</span>項目を追加
                 </button>
               )}
               {doneItems.length > 0 && (
                 <div className="mt-2 border-t border-black/10 pt-2 dark:border-white/10">
-                  <button type="button" onClick={() => setShowDone(!showDone)} className="text-xs text-zinc-500">
+                  <button type="button" onClick={() => setShowDone(!showDone)} className="py-1 text-sm text-zinc-500">
                     {showDone ? '▾' : '▸'} チェック済み {doneItems.length} 件
                   </button>
                   {showDone &&
                     doneItems.map((x) => (
-                      <div key={x.i} className="group flex items-start gap-2">
+                      <div key={x.i} className="group flex items-start gap-2.5">
                         <input
                           type="checkbox"
                           checked
@@ -713,14 +761,11 @@ function NoteEditor({
                           onKeyDown={itemKeys(x.i, x.text)}
                           className={cx(ITEM, 'text-zinc-500 line-through')}
                         />
-                        <button
-                          type="button"
-                          onClick={() => removeItem(x.i)}
-                          className={REMOVE}
-                          aria-label="項目を消す"
-                        >
-                          ×
-                        </button>
+                        {!ro && (
+                          <button type="button" onClick={() => removeItem(x.i)} className={REMOVE} aria-label="項目を消す">
+                            ×
+                          </button>
+                        )}
                       </div>
                     ))}
                 </div>
@@ -729,26 +774,29 @@ function NoteEditor({
           )}
 
           {d.labels.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-1">
+            <div className="mt-4 flex flex-wrap gap-1.5">
               {d.labels.map((l) => (
-                <span key={l} className="flex items-center gap-1 rounded-full bg-black/5 px-2 py-0.5 text-xs text-zinc-600 dark:bg-white/10 dark:text-zinc-300">
+                <span key={l} className="flex items-center gap-1 rounded-full bg-black/5 px-2.5 py-0.5 text-xs text-zinc-600 dark:bg-white/10 dark:text-zinc-300">
                   {l}
-                  <button type="button" onClick={() => set({ labels: d.labels.filter((x) => x !== l) })} aria-label={`${l} を外す`}>
-                    ×
-                  </button>
+                  {!ro && (
+                    <button type="button" onClick={() => set({ labels: d.labels.filter((x) => x !== l) })} aria-label={`${l} を外す`}>
+                      ×
+                    </button>
+                  )}
                 </span>
               ))}
             </div>
           )}
-          {note && <div className="mt-3 text-right text-[11px] text-zinc-400">編集 {note.updatedAt.slice(5, 16).replace('T', ' ').replace('-', '/')}</div>}
+          {/* 下の余白も「書くところ」（押すと続きから書ける） */}
+          <div data-write-on className="min-h-24 flex-1 md:min-h-16" />
         </div>
 
         {panel === 'color' && (
-          <div className="flex flex-wrap gap-2 border-t border-black/10 px-4 py-3 dark:border-white/10">
+          <div className="flex flex-wrap gap-2 border-t border-black/5 px-5 py-3 dark:border-white/10">
             <button
               type="button"
               onClick={() => set({ color: null })}
-              className={cx('size-8 rounded-full border-2 bg-white text-xs text-zinc-400 dark:bg-zinc-900', d.color === null ? 'border-indigo-500' : 'border-zinc-300 dark:border-zinc-600')}
+              className={cx('size-9 rounded-full border-2 bg-white text-xs text-zinc-400 dark:bg-zinc-900', d.color === null ? 'border-indigo-500' : 'border-zinc-300 dark:border-zinc-600')}
               aria-label="色なし"
               title="色なし"
             >
@@ -759,7 +807,7 @@ function NoteEditor({
                 key={c}
                 type="button"
                 onClick={() => set({ color: c })}
-                className={cx('size-8 rounded-full border-2', d.color === c ? 'border-indigo-500' : 'border-transparent')}
+                className={cx('size-9 rounded-full border-2', d.color === c ? 'border-indigo-500' : 'border-transparent')}
                 style={{ background: SWATCH[c] }}
                 aria-label={COLOR_LABEL[c]}
                 title={COLOR_LABEL[c]}
@@ -769,38 +817,38 @@ function NoteEditor({
         )}
         {panel === 'label' && <LabelPicker choices={labelChoices} selected={d.labels} onChange={(labels) => set({ labels })} />}
 
-        <div className="flex flex-wrap items-center gap-0.5 border-t border-black/10 px-2 py-1.5 dark:border-white/10">
+        {/* 下: チェックリスト⇔文章・色・ラベル／編集した時刻／削除（広い画面は「閉じる」も） */}
+        <div className="pb-safe flex shrink-0 items-center gap-0.5 px-1.5 pt-1 md:px-3 md:pb-3">
           {ro ? (
-            <span className="px-2 text-xs text-amber-700 dark:text-amber-300">📴 つながっていない: チェックだけできる（つながったら送る）</span>
+            <span className="px-3 py-3 text-xs text-amber-700 dark:text-amber-300">📴 つながっていない: チェックだけできる（つながったら送る）</span>
           ) : (
             <>
-              <button type="button" className={tool} onClick={() => setPanel(panel === 'color' ? null : 'color')} title="色">
-                🎨<span className="ml-0.5 text-xs">色</span>
-              </button>
-              <button type="button" className={tool} onClick={() => setPanel(panel === 'label' ? null : 'label')} title="ラベル">
-                🏷<span className="ml-0.5 text-xs">ラベル</span>
-              </button>
-              <button type="button" className={tool} onClick={convert} title={d.kind === 'text' ? 'チェックリストにする' : '文章にする'}>
+              <button
+                type="button"
+                className={icon}
+                onClick={convert}
+                aria-label={d.kind === 'text' ? 'チェックリストにする' : '文章にする'}
+                title={d.kind === 'text' ? 'チェックリストにする' : '文章にする'}
+              >
                 {d.kind === 'text' ? '☑' : '¶'}
-                <span className="ml-0.5 text-xs">{d.kind === 'text' ? 'リスト' : '文章'}</span>
               </button>
-              {id.current !== null && (
-                <button type="button" className={tool} onClick={archive} title={d.archived ? 'アーカイブから戻す' : 'アーカイブ'}>
-                  {d.archived ? '↩︎' : '🗄'}
-                  <span className="ml-0.5 text-xs">{d.archived ? '戻す' : 'アーカイブ'}</span>
-                </button>
-              )}
-              {id.current !== null && (
-                <button type="button" className={cx(tool, 'text-red-600 dark:text-red-400')} onClick={remove} title="削除">
-                  🗑<span className="ml-0.5 text-xs">削除</span>
-                </button>
-              )}
+              <button type="button" className={cx(icon, panel === 'color' && 'bg-black/5 dark:bg-white/10')} onClick={() => setPanel(panel === 'color' ? null : 'color')} aria-label="色" title="色">
+                🎨
+              </button>
+              <button type="button" className={cx(icon, panel === 'label' && 'bg-black/5 dark:bg-white/10')} onClick={() => setPanel(panel === 'label' ? null : 'label')} aria-label="ラベル" title="ラベル">
+                🏷
+              </button>
             </>
           )}
-          <button type="button" onClick={close} className="ml-auto rounded-md px-3 py-1.5 text-sm font-medium">
+          <span className="min-w-0 flex-1 truncate px-1 text-center text-[11px] text-zinc-400">{edited}</span>
+          {!ro && id.current !== null && (
+            <button type="button" className={icon} onClick={remove} aria-label="削除" title="削除">
+              <span className="text-[17px]">🗑</span>
+            </button>
+          )}
+          <button type="button" onClick={close} className="hidden rounded-lg px-4 py-2 text-sm font-medium hover:bg-black/5 md:block dark:hover:bg-white/10">
             閉じる
           </button>
-        </div>
         </div>
       </div>
     </div>

@@ -22,6 +22,13 @@
         var dark = p === 'dark' || (p !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
         document.documentElement.classList.toggle('dark', dark);
         document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+        // iPhone・iPad は 16px より小さい入力欄を押すと画面ごと拡大して、閉じても戻らない（下のタブが隠れる）。
+        // iOS だけ拡大の上限を 1 にする（iOS は指で広げる拡大はこれでも効く。Android はこの拡大が起きないので触らない）
+        if (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+          document
+            .querySelector('meta[name=viewport]')
+            .setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover');
+        }
       })();
     </script>
   </head>
