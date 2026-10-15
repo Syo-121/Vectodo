@@ -162,6 +162,18 @@ describe('ボトルネック', () => {
     expect(top.freed).toBe(1); // b だけ（c は x も待っている）
     expect(top.downstream).toBe(3); // b・c・d
     expect(list.some((x2) => x2.task.id === doneDep.id)).toBe(false);
+    // b は d を待たせているが、自分も a 待ちなので出さない（d は a の連鎖に入っている）
+    expect(list.some((x2) => x2.task.id === b.id)).toBe(false);
+    expect(list.map((x2) => x2.task.id)).toEqual([a.id, x.id]);
+  });
+
+  it('状態が「待ち」のものは、連鎖が長くても後ろに回す', () => {
+    const w = task({ status: 'waiting' });
+    const w1 = task({ dependsOn: [ref(w)] });
+    const w2 = task({ dependsOn: [ref(w1)] });
+    const r = task();
+    const r1 = task({ dependsOn: [ref(r)] });
+    expect(bottlenecks([w, w1, w2, r, r1]).map((x) => x.task.id)).toEqual([r.id, w.id]);
   });
 });
 

@@ -199,6 +199,10 @@ export interface Bottleneck {
   downstream: number;
 }
 
+/**
+ * ほかを待たせていて、いま手を付けられるもの。自分も依存待ち（先にやるものが残っている）なら出さない——
+ * 待っている分は、その先頭のタスクの連鎖に数える。状態が「待ち」（返事待ちなど）のものは後ろに回す
+ */
 export function bottlenecks(tasks: Task[]): Bottleneck[] {
   const open = tasks.filter((t) => isOpen(t.status));
   const byId = new Map(open.map((t) => [t.id, t]));
@@ -222,14 +226,20 @@ export function bottlenecks(tasks: Task[]): Bottleneck[] {
     return seen.size;
   };
   return [...waiters.entries()]
-    .filter(([id]) => byId.has(id))
+    .filter(([id]) => byId.has(id) && !byId.get(id)!.dependsOn.some((d) => isOpen(d.status)))
     .map(([id, ws]) => ({
       task: byId.get(id)!,
       waiters: ws.sort((a, b) => a.id - b.id),
       freed: ws.filter((w) => w.dependsOn.filter((d) => isOpen(d.status)).length === 1).length,
       downstream: downstream(id),
     }))
-    .sort((a, b) => b.downstream - a.downstream || b.freed - a.freed || byPriorityDue(a.task, b.task));
+    .sort(
+      (a, b) =>
+        Number(a.task.status === 'waiting') - Number(b.task.status === 'waiting') ||
+        b.downstream - a.downstream ||
+        b.freed - a.freed ||
+        byPriorityDue(a.task, b.task),
+    );
 }
 
 /** 直近の完了・中止を、終わった日ごとに（新しい日から） */

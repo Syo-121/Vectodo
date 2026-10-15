@@ -82,9 +82,9 @@ export function BottleneckView({ tasks, today, categories }: Common) {
   return (
     <div className="space-y-3 px-4 pb-4">
       <p className="text-xs text-zinc-500">
-        ほかのタスクを待たせているもの。上ほど、片付けると先へ進むタスクが多い（連鎖の数＝間接的に待っているものも含めた総数）。
+        ほかのタスクを待たせていて、いま手を付けられるもの。上ほど、片付けると先へ進むタスクが多い（連鎖の数＝間接的に待っているものも含めた総数）。自分も依存待ちのものは出さない（その分は先頭のタスクの連鎖に入っている）。
       </p>
-      {list.length === 0 && <p className="py-6 text-center text-sm text-zinc-400">待たせているタスクはない</p>}
+      {list.length === 0 && <p className="py-6 text-center text-sm text-zinc-400">いま片付けると先へ進めるタスクはない</p>}
       {list.map((b) => (
         <section key={b.task.id} className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
           <TaskRow task={b.task} today={today} categories={categories} showParent />

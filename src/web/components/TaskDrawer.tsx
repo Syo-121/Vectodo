@@ -106,8 +106,9 @@ function Detail({ id }: { id: number }) {
   const { data: categories = [] } = useCategories(true);
   const openTask = useOpenTask();
   const navigate = useNavigate();
-  /** シリーズの依存の図（ボードの「シリーズ」・v4）へ。詳細は閉じる */
-  const showSeries = (seriesId: number) => navigate(`/board?v=series&s=${seriesId}`);
+  /** シリーズの依存の図（ボードの「シリーズ」・v4）へ。focus を渡すと、図の中でそのタスクを光らせる。詳細は閉じる */
+  const showSeries = (seriesId: number, focus?: number) =>
+    navigate(`/board?v=series&s=${seriesId}${focus !== undefined ? `&f=${focus}` : ''}`);
   const update = useWrite((patch: Parameters<typeof api.update>[1]) => api.update(id, patch));
   const remove = useWrite(() => api.remove(id));
 
@@ -138,12 +139,17 @@ function Detail({ id }: { id: number }) {
 
       <div className="px-5 pt-4 pb-3">
         {t.parentId !== null && (
-          <div className="mb-1 flex items-baseline gap-3 text-xs">
+          <div className="mb-2 flex items-center gap-3 text-xs">
             <button type="button" onClick={() => openTask(t.parentId)} className="min-w-0 truncate text-indigo-600 dark:text-indigo-400">
               ↑ {t.parentTitle}
             </button>
-            <button type="button" onClick={() => showSeries(t.parentId!)} className="shrink-0 text-zinc-500">
-              シリーズの図
+            {/* 属するシリーズ（親）の依存の図へ。図ではこのタスクが光る */}
+            <button
+              type="button"
+              onClick={() => showSeries(t.parentId!, t.id)}
+              className="ml-auto shrink-0 rounded-full border border-indigo-300 px-2.5 py-1 text-indigo-700 dark:border-indigo-700 dark:text-indigo-300"
+            >
+              シリーズの図で見る →
             </button>
           </div>
         )}
