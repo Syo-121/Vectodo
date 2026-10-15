@@ -1,6 +1,6 @@
 // シリーズの依存の図（v4・design 7-12）。シリーズ＝親タスク1つ。子どうしの依存を DAG で描き、
 // 親をまたぐ線の先は「外」のノード（点線の枠）として出す。スマホは上→下、広い画面は左→右に流す。
-// 「つなぐ・外す」の間は、先→後の順に2つ押すと依存ができ、線を押すと外せる。
+// ノードの ● を押したまま後にやるタスクの上で離すと依存ができ、線を押すと外せる。上の欄から親に子タスクを足せる。
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
@@ -152,8 +152,6 @@ function GraphPanel({
   const dir: Dir = useWideScreen() ? 'right' : 'down';
   const g = GEOM[dir];
   const openTask = useOpenTask();
-  const [editing, setEditing] = useState(false);
-  const [sel, setSel] = useState<number | null>(null);
   const addDep = useWrite((e: Edge) => api.addDep(e.to, e.from));
   const rmDep = useWrite((e: Edge) => api.removeDep(e.to, e.from));
   const chain = useWrite(() => api.chainChildren(id));
@@ -185,18 +183,79 @@ function GraphPanel({
     el.scrollLeft = Math.max(0, place({ layer: first, slot: 0 }, dir).x - GEOM.right.main - 80);
   }, [layout, dir, all]);
 
-  const onTap = (t: Task) => {
-    if (!editing) return openTask(t.id);
-    if (sel === null) return setSel(t.id);
-    if (sel === t.id) return setSel(null);
-    const e = { from: sel, to: t.id };
-    if (graph.edges.some((x) => x.from === e.from && x.to === e.to)) {
-      toast('もうつながっている');
-      return setSel(t.id);
-    }
-    // つないだら、押したほうを次の「先」にする（続けて押すと一列につながる）
-    addDep.mutate(e, { onSuccess: () => setSel(t.id) });
+  // つなぐ: ノードの ● を押したまま、後にやるタスクの上で離すと 先→後 の線ができる（指でもマウスでも）。
+  // 画面の端に寄せている間は、図（横）とページ（縦）を送る
+  const [link, setLink] = useState<{ from: number; x0: number; y0: number; x: number; y: number; over: number | null } | null>(null);
+  const linkRef = useRef<{ from: number; handle: HTMLElement; x: number; y: number; raf: number } | null>(null);
+  const nodeAt = (x: number, y: number, from: number): number | null => {
+    const el = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-node]');
+    const nid = el ? Number(el.dataset.node) : null;
+    return nid !== null && nid !== from ? nid : null;
   };
+  const redraw = () => {
+    const l = linkRef.current;
+    if (!l) return;
+    const r = l.handle.getBoundingClientRect();
+    setLink({ from: l.from, x0: r.left + r.width / 2, y0: r.top + r.height / 2, x: l.x, y: l.y, over: nodeAt(l.x, l.y, l.from) });
+  };
+  const connect = (from: number, to: number) => {
+    if (graph.edges.some((x) => x.from === from && x.to === to)) return toast('もうつながっている');
+    addDep.mutate({ from, to });
+  };
+  const startLink = (t: Task, e: React.PointerEvent<HTMLElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const handle = e.currentTarget;
+    try {
+      handle.setPointerCapture(e.pointerId);
+    } catch {
+      // 指がもう離れていたら何もしない
+    }
+    const l = { from: t.id, handle, x: e.clientX, y: e.clientY, raf: 0 };
+    linkRef.current = l;
+    const EDGE = 40;
+    const tick = () => {
+      if (linkRef.current !== l) return;
+      const vy = l.y < EDGE ? -(EDGE - l.y) / 3 : l.y > window.innerHeight - EDGE ? (l.y - window.innerHeight + EDGE) / 3 : 0;
+      const sc = scroller.current?.getBoundingClientRect();
+      const vx = !sc ? 0 : l.x < sc.left + EDGE ? -(sc.left + EDGE - l.x) / 3 : l.x > sc.right - EDGE ? (l.x - sc.right + EDGE) / 3 : 0;
+      if (vy) window.scrollBy(0, vy);
+      if (vx && scroller.current) scroller.current.scrollLeft += vx;
+      if (vx || vy) redraw();
+      l.raf = requestAnimationFrame(tick);
+    };
+    l.raf = requestAnimationFrame(tick);
+    const move = (ev: PointerEvent) => {
+      l.x = ev.clientX;
+      l.y = ev.clientY;
+      redraw();
+    };
+    const end = (ev: PointerEvent) => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+      cancelAnimationFrame(l.raf);
+      linkRef.current = null;
+      setLink(null);
+      if (ev.type !== 'pointerup') return;
+      const to = nodeAt(ev.clientX, ev.clientY, l.from);
+      if (to !== null) connect(l.from, to);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+    redraw();
+  };
+  // 指でつないでいる間はページをスクロールさせない（touchmove を止めるには passive: false が要る）
+  useEffect(() => {
+    const stop = (e: TouchEvent) => {
+      if (linkRef.current) e.preventDefault();
+    };
+    window.addEventListener('touchmove', stop, { passive: false });
+    return () => window.removeEventListener('touchmove', stop);
+  }, []);
+
   const onEdge = (e: Edge) => {
     const a = all.get(e.from);
     const b = all.get(e.to);
@@ -214,13 +273,14 @@ function GraphPanel({
     <NodeCard
       key={t.id}
       t={t}
+      dir={dir}
       outside={!inside.has(t.id)}
-      selected={sel === t.id}
-      editing={editing}
+      linking={link?.from === t.id ? 'from' : link?.over === t.id ? 'over' : null}
       today={today}
       categories={categories}
       style={style}
-      onTap={onTap}
+      onOpen={() => openTask(t.id)}
+      onLinkStart={startLink}
     />
   );
 
@@ -239,52 +299,36 @@ function GraphPanel({
         </div>
       )}
 
+      {parent && <AddChild parentId={parent.id} />}
+
       {graph.nodes.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 pt-3">
-          <button
-            type="button"
-            onClick={() => {
-              setEditing(!editing);
-              setSel(null);
-            }}
-            className={cx(
-              'rounded-full px-3 py-1.5 text-sm',
-              editing
-                ? 'bg-indigo-600 text-white'
-                : 'border border-zinc-300 text-zinc-700 dark:border-zinc-700 dark:text-zinc-200',
-            )}
-          >
-            {editing ? '✓ つなぎ終わる' : 'つなぐ・外す'}
-          </button>
-          {missing > 0 && (editing || graph.edges.length === 0) && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-2 text-xs text-zinc-500">
+          <span>
+            {dir === 'right' ? '右' : '下'}の <span className="text-indigo-500">●</span> を、後にやるタスクまでドラッグするとつながる。線を押すと外せる。
+          </span>
+          {/* まだ線が1本も無いシリーズだけ（枝分かれさせた後に押して一列にしてしまわないように） */}
+          {missing > 0 && graph.edges.length === 0 && (
             <button
               type="button"
               onClick={onChain}
-              className="rounded-full border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700 dark:border-zinc-700 dark:text-zinc-200"
+              className="rounded-full border border-zinc-300 px-3 py-1 text-xs text-zinc-700 dark:border-zinc-700 dark:text-zinc-200"
             >
               並び順どおりに一列につなぐ
             </button>
           )}
         </div>
       )}
-      {editing && (
-        <p className="mt-2 rounded-lg bg-indigo-50 px-3 py-2 text-xs leading-relaxed text-indigo-900 dark:bg-indigo-950/50 dark:text-indigo-200">
-          {sel === null
-            ? '先にやるタスクを押す。線を押すと外せる。'
-            : `「${all.get(sel)?.title}」の後にやるタスクを押す（同じものをもう一度押すと選び直し）。`}
-        </p>
-      )}
 
       {graph.nodes.length === 0 && (
-        <p className="py-6 text-sm text-zinc-500">子タスクがまだない。親の詳細で子を足すと、ここに並ぶ。</p>
+        <p className="py-6 text-sm text-zinc-500">子タスクがまだない。上の欄から足すと、ここに並ぶ。</p>
       )}
 
       {layout.layers > 0 && (
         <div
           ref={scroller}
-          className={cx('scroll-thin -mx-4 mt-3 overflow-x-auto px-4 py-2', dir === 'right' && 'cursor-grab select-none')}
+          className={cx('scroll-thin -mx-4 mt-3 overflow-x-auto px-4 pt-2 pb-4', dir === 'right' && 'cursor-grab select-none')}
           onPointerDown={(e) => {
-            if (e.pointerType !== 'mouse' || (e.target as Element).closest('button, [data-hit]')) return;
+            if (e.pointerType !== 'mouse' || (e.target as Element).closest('button, [data-hit], [data-handle]')) return;
             drag.current = { x: e.clientX, left: e.currentTarget.scrollLeft };
           }}
           onPointerMove={(e) => {
@@ -298,7 +342,7 @@ function GraphPanel({
               {layout.edges.map((e) => {
                 const { d, tip } = edgePath(e.points, dir);
                 const from = all.get(e.from)!;
-                const hot = sel !== null && (e.from === sel || e.to === sel);
+                const hot = link !== null && (e.from === link.from || e.to === link.from);
                 return (
                   <g
                     key={`${e.from}>${e.to}`}
@@ -318,19 +362,17 @@ function GraphPanel({
                       strokeDasharray={from.status === 'canceled' ? '4 4' : undefined}
                     />
                     <polygon points={arrow(tip, dir)} fill="currentColor" />
-                    {editing && (
-                      <path
-                        d={d}
-                        fill="none"
-                        stroke="transparent"
-                        strokeWidth={18}
-                        data-hit
-                        style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
-                        onClick={() => onEdge(e)}
-                      >
-                        <title>この線を外す</title>
-                      </path>
-                    )}
+                    <path
+                      d={d}
+                      fill="none"
+                      stroke="transparent"
+                      strokeWidth={18}
+                      data-hit
+                      style={{ pointerEvents: link ? 'none' : 'stroke', cursor: 'pointer' }}
+                      onClick={() => onEdge(e)}
+                    >
+                      <title>この線を外す</title>
+                    </path>
                   </g>
                 );
               })}
@@ -348,7 +390,7 @@ function GraphPanel({
           <h3 className="pb-2 text-xs font-semibold text-zinc-500">
             まだ線がないもの（{layout.isolated.length}）
           </h3>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-x-5 gap-y-5 pb-3">
             {layout.isolated.map((nid) => node(all.get(nid)!, { width: g.w, height: g.h }))}
           </div>
         </section>
@@ -359,28 +401,78 @@ function GraphPanel({
           線は 先 → 後（後のものは、先のものが終わるまで着手できない）。薄いもの＝依存待ち・待ち、✓＝完了、点線の枠＝ほかのシリーズのタスク。
         </p>
       )}
+
+      {/* つないでいる間の線（指・マウスの先まで） */}
+      {link && (
+        <svg className="pointer-events-none fixed inset-0 z-30 h-full w-full text-indigo-500">
+          <line x1={link.x0} y1={link.y0} x2={link.x} y2={link.y} stroke="currentColor" strokeWidth={2} strokeDasharray="6 4" />
+          <circle cx={link.x} cy={link.y} r={5} fill="currentColor" />
+        </svg>
+      )}
     </div>
+  );
+}
+
+/** このシリーズ（親）に子タスクを足す。タイトルだけで Enter、続けて何件でも */
+function AddChild({ parentId }: { parentId: number }) {
+  const [title, setTitle] = useState('');
+  const input = useRef<HTMLInputElement>(null);
+  const create = useWrite(api.create);
+  const submit = () => {
+    const t = title.trim();
+    if (!t) return;
+    create.mutate({ title: t, parentId }, { onSuccess: (task) => toast(`${task.code} を足した`) });
+    setTitle('');
+    input.current?.focus();
+  };
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit();
+      }}
+      className="flex gap-2 pt-3"
+    >
+      <input
+        ref={input}
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="＋ このシリーズに子タスクを足す"
+        enterKeyHint="send"
+        className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500 md:max-w-md dark:border-zinc-700 dark:bg-zinc-900"
+      />
+      <button
+        type="submit"
+        disabled={!title.trim()}
+        className="shrink-0 rounded-lg bg-indigo-600 px-3 py-2 text-sm text-white disabled:opacity-40"
+      >
+        追加
+      </button>
+    </form>
   );
 }
 
 function NodeCard({
   t,
+  dir,
   outside,
-  selected,
-  editing,
+  linking,
   today,
   categories,
   style,
-  onTap,
+  onOpen,
+  onLinkStart,
 }: {
   t: Task;
+  dir: Dir;
   outside: boolean;
-  selected: boolean;
-  editing: boolean;
+  /** つないでいる最中: from＝ここから引いている・over＝ここで離すとつながる */
+  linking: 'from' | 'over' | null;
   today: string;
   categories: Map<number, Category>;
   style: React.CSSProperties;
-  onTap: (t: Task) => void;
+  onOpen: () => void;
+  onLinkStart: (t: Task, e: React.PointerEvent<HTMLElement>) => void;
 }) {
   const cat = t.categoryId !== null ? categories.get(t.categoryId) : undefined;
   const done = t.status === 'done';
@@ -393,64 +485,82 @@ function NodeCard({
       : outside
         ? 'border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900/60'
         : 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-900';
-  const ring = selected
+  const ring = linking
     ? 'ring-2 ring-indigo-500 ring-offset-1 dark:ring-offset-zinc-950'
     : t.status === 'doing'
       ? 'ring-1 ring-indigo-400'
       : null;
   return (
-    <button
-      type="button"
-      onClick={() => onTap(t)}
-      style={style}
-      title={`${t.code} ${t.title}`}
-      className={cx(
-        'flex flex-col gap-1 overflow-hidden rounded-lg border px-2.5 py-2 text-left shadow-xs transition',
-        tone,
-        ring,
-        outside && 'border-dashed',
-        (isDimmed(t) || canceled) && !selected && 'opacity-50',
-        editing && !selected && 'hover:shadow-md',
-      )}
-    >
-      <div className="flex min-w-0 items-center gap-1 text-[10px] leading-none text-zinc-400">
-        {cat && <span className="size-1.5 shrink-0 rounded-full" style={{ background: cat.color }} />}
-        <span className="shrink-0">{t.code}</span>
-        {done ? (
-          <span className="shrink-0 text-emerald-600 dark:text-emerald-400">✓</span>
-        ) : (
-          t.status !== 'todo' && (
-            <span className={cx('shrink-0', t.status === 'doing' && 'text-indigo-600 dark:text-indigo-400')}>
-              {STATUS_LABEL[t.status]}
-            </span>
-          )
-        )}
-        {t.children.total > 0 && (
-          <span className="shrink-0">
-            子{t.children.done}/{t.children.total}
-          </span>
-        )}
-        {outside ? (
-          <span className="ml-auto min-w-0 truncate">{t.parentTitle ? `↑${t.parentTitle}` : 'シリーズの外'}</span>
-        ) : (
-          t.dueDate &&
-          !done &&
-          !canceled && (
-            <span className={cx('ml-auto shrink-0', t.dueDate < today && 'text-red-500')}>
-              ⏰{fmtDate(t.dueDate, today)}
-            </span>
-          )
-        )}
-      </div>
-      <div
+    <div data-node={t.id} style={style} className="relative">
+      <button
+        type="button"
+        onClick={onOpen}
+        title={`${t.code} ${t.title}`}
         className={cx(
-          'line-clamp-2 text-[13px] leading-snug',
-          (done || canceled) && 'text-zinc-500 dark:text-zinc-400',
-          canceled && 'line-through',
+          'flex size-full flex-col gap-1 overflow-hidden rounded-lg border px-2.5 py-2 text-left shadow-xs transition',
+          tone,
+          ring,
+          outside && 'border-dashed',
+          (isDimmed(t) || canceled) && !linking && 'opacity-50',
+          linking === 'over' && 'shadow-md',
         )}
       >
-        {t.title}
-      </div>
-    </button>
+        <div className="flex min-w-0 items-center gap-1 text-[10px] leading-none text-zinc-400">
+          {cat && <span className="size-1.5 shrink-0 rounded-full" style={{ background: cat.color }} />}
+          <span className="shrink-0">{t.code}</span>
+          {done ? (
+            <span className="shrink-0 text-emerald-600 dark:text-emerald-400">✓</span>
+          ) : (
+            t.status !== 'todo' && (
+              <span className={cx('shrink-0', t.status === 'doing' && 'text-indigo-600 dark:text-indigo-400')}>
+                {STATUS_LABEL[t.status]}
+              </span>
+            )
+          )}
+          {t.children.total > 0 && (
+            <span className="shrink-0">
+              子{t.children.done}/{t.children.total}
+            </span>
+          )}
+          {outside ? (
+            <span className="ml-auto min-w-0 truncate">{t.parentTitle ? `↑${t.parentTitle}` : 'シリーズの外'}</span>
+          ) : (
+            t.dueDate &&
+            !done &&
+            !canceled && (
+              <span className={cx('ml-auto shrink-0', t.dueDate < today && 'text-red-500')}>
+                ⏰{fmtDate(t.dueDate, today)}
+              </span>
+            )
+          )}
+        </div>
+        <div
+          className={cx(
+            'line-clamp-2 text-[13px] leading-snug',
+            (done || canceled) && 'text-zinc-500 dark:text-zinc-400',
+            canceled && 'line-through',
+          )}
+        >
+          {t.title}
+        </div>
+      </button>
+      {/* 線を引く取っ手（出口の側）。押したまま、後にやるタスクの上で離す */}
+      <span
+        data-handle
+        onPointerDown={(e) => onLinkStart(t, e)}
+        title="ドラッグして、後にやるタスクの上で離すとつながる"
+        className={cx(
+          'absolute z-10 flex size-7 cursor-crosshair touch-none items-center justify-center',
+          dir === 'right' ? 'top-1/2 -right-3.5 -translate-y-1/2' : '-bottom-3.5 left-1/2 -translate-x-1/2',
+        )}
+      >
+        <span
+          className={cx(
+            'size-3 rounded-full border-2 border-indigo-500',
+            linking === 'from' ? 'bg-indigo-500' : 'bg-white dark:bg-zinc-900',
+          )}
+        />
+      </span>
+    </div>
   );
 }
