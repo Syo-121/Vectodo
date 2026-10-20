@@ -4,7 +4,6 @@
 import { PRIORITY_LABEL } from '../../shared/constants.ts';
 import { addDays, isoWeekday } from '../../shared/dates.ts';
 import { PLACE_DEFAULT_MIN } from '../../shared/flow.ts';
-import { fmtAmount } from '../../shared/goals.ts';
 import { formatTaskCode } from '../../shared/ids.ts';
 import type { Category, GoalPlan, Task } from '../../shared/types.ts';
 
@@ -175,12 +174,11 @@ export const goalPlanSlot = (planId: number) => `goal:${planId}`;
  */
 export function desiredForGoalPlan(p: GoalPlan, ctx: PlanContext): Desired {
   const slot = goalPlanSlot(p.id);
-  const amount = p.amount !== null ? ` ${fmtAmount(p.amount, p.unit)}` : '';
   const lines = [`目標: ${p.goalCode} ${p.rule}（Vectodo で管理）`];
   if (ctx.appUrl) lines.push(`${ctx.appUrl}/goals/${p.goalId}`);
   const base = {
     calendarId: ctx.defaultCalendarId,
-    summary: `${p.done ? '【済】' : ''}【目標】${p.title}${amount}`,
+    summary: `${p.done ? '【済】' : ''}【目標】${p.title}`,
     description: lines.join('\n'),
     colorId: '10',
   };

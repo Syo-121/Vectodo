@@ -227,11 +227,11 @@ for (const [n, amount] of [
 }
 at(T);
 // 目標をやる時間（design 4-14）
-goals.addPlan(words.id, { date: T, start: '21:00', minutes: 30, amount: 15 });
-goals.addPlan(book.id, { date: T, start: '22:00', minutes: 45, amount: 15 });
-goals.addPlan(run.id, { date: d(1), start: '07:00', minutes: 30, amount: 1 });
-goals.addPlan(run.id, { date: d(3), start: '07:00', minutes: 30, amount: 1 });
-goals.addPlan(book.id, { date: d(2), amount: 20 });
+goals.addPlan(words.id, { date: T, start: '21:00', minutes: 30 });
+goals.addPlan(book.id, { date: T, start: '22:00', minutes: 45 });
+goals.addPlan(run.id, { date: d(1), start: '07:00', minutes: 30 });
+goals.addPlan(run.id, { date: d(3), start: '07:00', minutes: 30 });
+goals.addPlan(book.id, { date: d(2) });
 
 db.close();
 console.log(`デモの DB を作った: ${file}（今日= ${T}）`);

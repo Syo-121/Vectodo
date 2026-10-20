@@ -548,17 +548,16 @@ export function createMcpServer(s: Services): McpServer {
     'plan_goal',
     {
       description:
-        '目標をやる時間を置く（例: 「明日の21時から30分、本を10ページ読む枠を入れて」）。タスクは作らない。時間割（今日の流れ・ボードの日・週・月）に緑の枠で出て、Google カレンダーにも【目標】として書き出される（時刻があれば5分前に通知）。記録するとその予定は済になる。外す・動かすのは本人が画面で。',
+        '目標をやる時間を置く（例: 「明日の21時から30分、本を読む時間を入れて」）。目標の名前で入る（量は持たない＝本人が記録するときに決める）。タスクは作らない。時間割（今日の流れ・ボードの日・週・月）に緑の枠で出て、Google カレンダーにも【目標】として書き出される（時刻があれば5分前に通知）。記録するとその予定は済になる。外す・動かすのは本人が画面で。',
       inputSchema: {
         goal: zGoalRef,
         date: zDate.describe('やる日 YYYY-MM-DD'),
         start: zTime.optional().describe('始める時刻 HH:MM（省くと時刻なし）'),
         minutes: z.number().int().positive().max(1440).optional().describe('長さ（分・省くと 30）'),
-        amount: z.number().positive().optional().describe('この時間にやる量（例: 10）'),
       },
     },
-    safe(({ goal, date, start, minutes, amount }) => {
-      const p = s.goals.addPlan(s.goals.resolve(goal), { date, start: start ?? null, minutes: minutes ?? (start ? 30 : null), amount: amount ?? null });
+    safe(({ goal, date, start, minutes }) => {
+      const p = s.goals.addPlan(s.goals.resolve(goal), { date, start: start ?? null, minutes: minutes ?? (start ? 30 : null) });
       return text(`置いた:\n${p.goalCode} ${p.title}\n${goalPlanLine(p)}`);
     }),
   );

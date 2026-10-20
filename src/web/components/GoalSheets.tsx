@@ -9,7 +9,6 @@ import { defaultStart, fmtAmount, goalRuleText, logFrom, round } from '../../sha
 import type { GoalCreateInput, GoalPlanCreateInput, GoalPlanPatchInput } from '../../shared/schemas.ts';
 import type { Goal, GoalPeriod, GoalPlan } from '../../shared/types.ts';
 import { api, useGoal, useGoals, useGoalWrite } from '../api.ts';
-import { planAmount } from '../goalPlans.ts';
 import { amountChips, previewLog, spanText } from '../goalView.ts';
 import { toast } from '../toast.ts';
 import { addDays, clientToday, cx, fmtDate, fmtMonthDay } from '../util.ts';
@@ -75,7 +74,7 @@ export function LogSheet({ g, date: initial, plan: given, onClose }: { g: Goal; 
   const plan = given ? (d ? d.plans.find((p) => p.id === given.id) : given) : undefined;
   const from = logFrom(g);
   const [date, setDate] = useState(given?.date ?? initial ?? today);
-  const [value, setValue] = useState(given?.amount != null ? String(given.amount) : g.unit === '回' ? '1' : '');
+  const [value, setValue] = useState(g.unit === '回' ? '1' : '');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const log = useLogGoal();
@@ -357,8 +356,8 @@ export function PlanSheet({ plan, onClose }: { plan: GoalPlan; onClose: () => vo
 }
 
 /**
- * やる時間を入れる（月ビュー・目標の詳細から。時間割では置くパネルから入れる）。目標・日付・時刻（無しでもよい）・長さ・量。
- * goal を渡すとその目標に決めて開く
+ * やる時間を入れる（月ビュー・目標の詳細から。時間割では置くパネルから入れる）。目標・日付・時刻（無しでもよい）・長さ。
+ * 量は入れない（記録するときに決める）。goal を渡すとその目標に決めて開く
  */
 export function PlanCreateSheet({ date: initial, goal: fixed, onClose }: { date: string; goal?: Goal; onClose: () => void }) {
   const today = clientToday();
@@ -369,19 +368,15 @@ export function PlanCreateSheet({ date: initial, goal: fixed, onClose }: { date:
   const [date, setDate] = useState(initial);
   const [start, setStart] = useState('');
   const [minutes, setMinutes] = useState(PLACE_DEFAULT_MIN);
-  // 量は、触っていなければ目標に合わせた既定（planAmount）
-  const [amount, setAmount] = useState<string | null>(null);
-  const amountText = amount ?? (g ? String(planAmount(g) ?? '') : '');
   const create = useGoalWrite((a: { goalId: number; input: GoalPlanCreateInput }) => api.addGoalPlan(a.goalId, a.input));
-  const n = Number(amountText);
-  const ok = g !== undefined && date >= logFrom(g) && (amountText.trim() === '' || (Number.isFinite(n) && n > 0));
+  const ok = g !== undefined && date >= logFrom(g);
 
   const submit = () => {
     if (!ok || !g || create.isPending) return;
     create.mutate(
       {
         goalId: g.id,
-        input: { date, start: start || null, minutes: start ? minutes : null, amount: amountText.trim() ? n : null },
+        input: { date, start: start || null, minutes: start ? minutes : null },
       },
       {
         onSuccess: (p) => {
@@ -412,10 +407,7 @@ export function PlanCreateSheet({ date: initial, goal: fixed, onClose }: { date:
                   <button
                     key={x.id}
                     type="button"
-                    onClick={() => {
-                      setGoalId(x.id);
-                      setAmount(null);
-                    }}
+                    onClick={() => setGoalId(x.id)}
                     className={cx('flex w-full items-baseline gap-2 px-3 py-2.5 text-left', g?.id === x.id && 'bg-emerald-50 dark:bg-emerald-950/50')}
                   >
                     <span className={cx('size-3.5 shrink-0 self-center rounded-full border-2', g?.id === x.id ? 'border-emerald-600 bg-emerald-600' : 'border-zinc-300')} />
@@ -448,24 +440,9 @@ export function PlanCreateSheet({ date: initial, goal: fixed, onClose }: { date:
               </div>
             </div>
           )}
-          {g && (
-            <label className="block">
-              <span className={LABEL}>この時間にやる量（任意）</span>
-              <span className="mt-1.5 flex items-center gap-2">
-                <input
-                  inputMode="decimal"
-                  value={amountText}
-                  onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))}
-                  placeholder="量"
-                  className={cx(INPUT, 'w-24 text-center')}
-                />
-                <span className="text-sm text-zinc-500">{g.unit}</span>
-              </span>
-            </label>
-          )}
           {g && date < logFrom(g) && <p className="text-xs text-amber-600">{fmtDate(logFrom(g), today)} より前には入れられない（数え始める前）</p>}
           <p className="text-xs leading-relaxed text-zinc-500">
-            タスクにはしない。時間割と月に緑で出て、Google カレンダーにも【目標】として入る{start ? '（5分前に通知）' : ''}。記録すると済になる。
+            目標の名前だけで入る（量は記録するときに決める）。タスクにはしない。時間割と月に緑で出て、Google カレンダーにも【目標】として入る{start ? '（5分前に通知）' : ''}。記録すると済になる。
           </p>
           <button
             type="submit"

@@ -368,10 +368,10 @@ describe('目標をやる時間の書き出し（design 4-14）', () => {
     });
     await gcal.mapCalendars();
     const g = s.goals.create({ title: '回路の本', kind: 'rate', period: 'day', target: 10, unit: 'ページ' });
-    const timed = s.goals.addPlan(g.id, { date: TODAY, start: '21:00', minutes: 30, amount: 10 });
-    s.goals.addPlan(g.id, { date: '2026-10-14', amount: 10 });
+    const timed = s.goals.addPlan(g.id, { date: TODAY, start: '21:00', minutes: 30 });
+    s.goals.addPlan(g.id, { date: '2026-10-14' });
     expect(await gcal.run()).toMatchObject({ created: 2, errors: [] });
-    expect(google.calls).toEqual(['insert cal-other 【目標】回路の本 10ページ', 'insert cal-other 【目標】回路の本 10ページ']);
+    expect(google.calls).toEqual(['insert cal-other 【目標】回路の本', 'insert cal-other 【目標】回路の本']);
     const bodies = [...google.events.values()].map((e) => e.body!);
     expect(bodies[0]).toMatchObject({
       start: { dateTime: '2026-10-13T21:00:00+09:00' },
@@ -387,7 +387,7 @@ describe('目標をやる時間の書き出し（design 4-14）', () => {
     s.goals.addLog(g.id, { amount: 10 });
     google.calls = [];
     await gcal.run();
-    expect(google.calls).toEqual(['update cal-other 【済】【目標】回路の本 10ページ']);
+    expect(google.calls).toEqual(['update cal-other 【済】【目標】回路の本']);
     expect([...google.events.values()][0]!.body!.reminders.overrides).toEqual([]);
 
     // 外したら消す

@@ -10,7 +10,7 @@ describe('目標をやる時間（design 3-6f・4-14）', () => {
   it('置く・動かす・外す。数え始める前とアーカイブした目標には置けない', () => {
     const { goals } = setup(T);
     const g = goals.create({ title: '回路の本', kind: 'rate', period: 'day', target: 10, unit: 'ページ' });
-    const p = goals.addPlan(g.id, { date: '2026-10-21', start: '21:00', minutes: 30, amount: 10 });
+    const p = goals.addPlan(g.id, { date: '2026-10-21', start: '21:00', minutes: 30 });
     expect(p).toMatchObject({ goalCode: 'G-001', title: '回路の本', unit: 'ページ', rule: '1日に10ページ', start: '21:00', done: false });
     expect(goals.updatePlan(p.id, { date: '2026-10-22', start: null })).toMatchObject({ date: '2026-10-22', start: null, minutes: 30 });
     expect(() => goals.addPlan(g.id, { date: '2026-10-19' })).toThrow('数え始める日');
@@ -42,8 +42,8 @@ describe('目標をやる時間（design 3-6f・4-14）', () => {
   it('記録と結ぶ: 予定から記録したらその予定・そうでなければその日の最初のまだの予定。記録を消すと元に戻る', () => {
     const { goals } = setup(T);
     const g = goals.create({ title: '本', kind: 'rate', period: 'day', target: 10, unit: 'ページ', startDate: '2026-10-01' });
-    const morning = goals.addPlan(g.id, { date: T, start: '07:00', amount: 5 });
-    const night = goals.addPlan(g.id, { date: T, start: '21:00', amount: 5 });
+    const morning = goals.addPlan(g.id, { date: T, start: '07:00' });
+    const night = goals.addPlan(g.id, { date: T, start: '21:00' });
     // 予定を指して記録
     let d = goals.addLog(g.id, { amount: 5, planId: night.id });
     expect(d.plans.map((p) => p.done)).toEqual([false, true]);
@@ -66,11 +66,11 @@ describe('目標をやる時間（design 3-6f・4-14）', () => {
   it('MCP の詳細にまだの予定を出す', () => {
     const { goals } = setup(T);
     const g = goals.create({ title: '本', kind: 'rate', period: 'day', target: 10, unit: 'ページ' });
-    goals.addPlan(g.id, { date: '2026-10-21', start: '21:00', minutes: 30, amount: 10 });
+    goals.addPlan(g.id, { date: '2026-10-21', start: '21:00', minutes: 30 });
     goals.addPlan(g.id, { date: '2026-10-22' });
     expect(goalDetailText(goals.get(g.id)).split('\n').slice(-3)).toEqual([
       'やる時間（まだのもの 2件）:',
-      '- #1 2026-10-21 21:00〜(30m) 10ページ',
+      '- #1 2026-10-21 21:00〜(30m)',
       '- #2 2026-10-22（時刻なし）',
     ]);
   });
@@ -83,7 +83,7 @@ describe('目標をやる時間（design 3-6f・4-14）', () => {
     const created = await app.request('/api/goals/G-001/plans', {
       method: 'POST',
       headers: H,
-      body: JSON.stringify({ date: T, start: '21:00', minutes: 30, amount: 10 }),
+      body: JSON.stringify({ date: T, start: '21:00', minutes: 30 }),
     });
     expect(created.status).toBe(201);
     const plan = (await created.json()) as { id: number };
@@ -106,9 +106,9 @@ describe('目標をやる時間（design 3-6f・4-14）', () => {
         jsonrpc: '2.0',
         id: 2,
         method: 'tools/call',
-        params: { name: 'plan_goal', arguments: { goal: '本', date: '2026-10-21', start: '21:00', amount: 10 } },
+        params: { name: 'plan_goal', arguments: { goal: '本', date: '2026-10-21', start: '21:00' } },
       })
     ).json()) as { result: { content: { text: string }[] } };
-    expect(call.result.content[0]!.text).toContain('2026-10-21 21:00〜(30m) 10ページ');
+    expect(call.result.content[0]!.text).toContain('2026-10-21 21:00〜(30m)');
   });
 });

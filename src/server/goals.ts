@@ -217,7 +217,7 @@ export class GoalService {
     return this.get(r.goal_id);
   }
 
-  // ── やる時間（design 3-6f・4-14）。タスクにはせず、目標ごとに日付・時刻・長さ・量を持つ
+  // ── やる時間（design 3-6f・4-14）。タスクにはせず、目標ごとに日付・時刻・長さを持つ（量は持たない）
 
   private planRows(where: string, params: Param[]): GoalPlan[] {
     const rows = this.db
@@ -247,7 +247,7 @@ export class GoalService {
     return p;
   }
 
-  /** やる時間を置く。記録できる日（数え始める日〜）だけ・アーカイブした目標には置かない */
+  /** やる時間を置く（目標と日付・時刻・長さだけ。量は記録するときに決める）。記録できる日（数え始める日〜）だけ・アーカイブした目標には置かない */
   addPlan(goalId: number, input: GoalPlanCreateInput): GoalPlan {
     const g = this.get(goalId);
     if (g.archived) throw badRequest('アーカイブした目標には置けない');
@@ -255,13 +255,13 @@ export class GoalService {
     const now = this.clock.now();
     const res = this.db
       .prepare(
-        `INSERT INTO goal_plans (goal_id, date, start_time, minutes, amount, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO goal_plans (goal_id, date, start_time, minutes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
       )
-      .run(goalId, input.date, input.start ?? null, input.minutes ?? null, input.amount ?? null, now, now);
+      .run(goalId, input.date, input.start ?? null, input.minutes ?? null, now, now);
     return this.plan(Number(res.lastInsertRowid));
   }
 
-  /** やる時間を動かす・長さや量を変える（時刻を null にすると時刻なし） */
+  /** やる時間を動かす・長さを変える（時刻を null にすると時刻なし） */
   updatePlan(id: number, patch: GoalPlanPatchInput): GoalPlan {
     const cur = this.plan(id);
     if (patch.date !== undefined && patch.date < logFrom(this.get(cur.goalId))) throw badRequest('数え始める日より前には動かせない');
@@ -271,7 +271,6 @@ export class GoalService {
     if (patch.date !== undefined) set('date', patch.date);
     if (patch.start !== undefined) set('start_time', patch.start);
     if (patch.minutes !== undefined) set('minutes', patch.minutes);
-    if (patch.amount !== undefined) set('amount', patch.amount);
     if (sets.length) {
       set('updated_at', this.clock.now());
       this.db.prepare(`UPDATE goal_plans SET ${sets.join(', ')} WHERE id = ?`).run(...vals, id);
@@ -292,7 +291,6 @@ interface PlanRow {
   date: string;
   start_time: string | null;
   minutes: number | null;
-  amount: number | null;
   log_id: number | null;
   title: string;
   unit: string;
@@ -313,7 +311,6 @@ const toPlan = (r: PlanRow): GoalPlan => ({
   date: r.date,
   start: r.start_time,
   minutes: r.minutes,
-  amount: r.amount,
   done: r.log_id !== null,
   logId: r.log_id,
 });

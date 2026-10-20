@@ -187,14 +187,11 @@ const goalPlanFields = {
   /** その日の時刻（null＝時刻なし） */
   start: zTime.nullable(),
   minutes: z.number().int().positive().max(24 * 60).nullable(),
-  /** この時間にやる量（null＝決めていない） */
-  amount: zAmount.nullable(),
 };
 export const zGoalPlanCreate = z.object({
   date: goalPlanFields.date,
   start: goalPlanFields.start.optional(),
   minutes: goalPlanFields.minutes.optional(),
-  amount: goalPlanFields.amount.optional(),
 });
 export type GoalPlanCreateInput = z.infer<typeof zGoalPlanCreate>;
 export const zGoalPlanPatch = z.object(goalPlanFields).partial();

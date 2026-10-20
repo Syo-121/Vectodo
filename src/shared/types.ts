@@ -311,7 +311,7 @@ export interface GoalDetail extends Goal {
 export interface GoalPlan {
   id: number;
   goalId: number;
-  /** 目標の番号・名前・単位・言い方（時間割・Google の予定に出す） */
+  /** 目標の番号・名前・単位・言い方（量は持たない＝記録するときに決める） */
   goalCode: string;
   title: string;
   unit: string;
@@ -320,8 +320,6 @@ export interface GoalPlan {
   /** その日の時刻 HH:MM（null＝時刻なし＝終日の段） */
   start: string | null;
   minutes: number | null;
-  /** この時間にやる量（null＝決めていない） */
-  amount: number | null;
   /** 記録と結ばれた（＝やった） */
   done: boolean;
   logId: number | null;

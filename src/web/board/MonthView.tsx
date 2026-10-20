@@ -4,7 +4,6 @@
 // 目標をやる時間（design 4-14）は緑で出し、選んだ日の下の［＋ 目標をやる時間を入れる］から入れる（押すと記録のシート）。
 
 import { useState } from 'react';
-import { fmtAmount } from '../../shared/goals.ts';
 import type { Category, GoalPlan, OverlayEvent, Task } from '../../shared/types.ts';
 import { useGoalPlans, useOverlay } from '../api.ts';
 import { PlanCreateSheet, PlanSheet } from '../components/GoalSheets.tsx';
@@ -192,7 +191,6 @@ function PlanCard({ plan, onOpen }: { plan: GoalPlan; onOpen: () => void }) {
       <span className="w-12 shrink-0 text-xs text-zinc-500 tabular-nums">{plan.start ?? '終日'}</span>
       <span className="min-w-0 flex-1 truncate font-medium">
         🎯 {plan.title}
-        {plan.amount !== null && <span className="ml-1 font-normal text-zinc-500">{fmtAmount(plan.amount, plan.unit)}</span>}
       </span>
       {plan.done && <span className="shrink-0 text-xs font-medium">✓ 済</span>}
     </button>

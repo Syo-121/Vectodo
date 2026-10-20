@@ -101,8 +101,7 @@ function Plans({ g, today, onOpen, onAdd }: { g: GoalDetail; today: string; onOp
         {p.start ? `${p.start}〜` : '時刻なし'}
       </span>
       <span className="min-w-0 flex-1 truncate text-zinc-500">
-        {p.amount !== null && fmtAmount(p.amount, p.unit)}
-        {past && <span className="ml-1 text-amber-600 dark:text-amber-400">まだ記録していない</span>}
+        {past && <span className="text-amber-600 dark:text-amber-400">まだ記録していない</span>}
       </span>
       <span className="text-zinc-300 dark:text-zinc-600">›</span>
     </button>

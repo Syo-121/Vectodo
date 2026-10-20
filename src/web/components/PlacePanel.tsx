@@ -8,11 +8,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { fmtClock, PLACE_DEFAULT_MIN, toMin } from '../../shared/flow.ts';
-import { fmtAmount, logFrom } from '../../shared/goals.ts';
+import { logFrom } from '../../shared/goals.ts';
 import { nextReason } from '../../shared/next.ts';
 import type { Goal, NextItem, Task } from '../../shared/types.ts';
 import { api, useGoals, useGoalWrite, useWrite } from '../api.ts';
-import { planAmount } from '../goalPlans.ts';
 import type { Draft, Slot } from '../grid.ts';
 import { SIDE_PANEL_ID } from '../sidePanel.ts';
 import { toast } from '../toast.ts';
@@ -93,7 +92,7 @@ export function PlacePanel({
   const { data: goals = [] } = useGoals();
   const goalOptions = goals.filter((g) => !g.progress.ended && date >= logFrom(g));
   const addPlan = useGoalWrite((g: Goal) =>
-    api.addGoalPlan(g.id, { date, start, minutes: draft.len ?? PLACE_DEFAULT_MIN, amount: planAmount(g) }),
+    api.addGoalPlan(g.id, { date, start, minutes: draft.len ?? PLACE_DEFAULT_MIN }),
   );
   const chooseGoal = (g: Goal) =>
     addPlan.mutate(g, {
@@ -175,21 +174,17 @@ export function PlacePanel({
         <div className="mt-3">
           <p className="mb-1.5 text-xs text-zinc-500">目標をやる時間にする</p>
           <div className="flex flex-wrap gap-1.5">
-            {goalOptions.map((g) => {
-              const amount = planAmount(g);
-              return (
-                <button
-                  key={g.id}
-                  type="button"
-                  disabled={addPlan.isPending}
-                  onClick={() => chooseGoal(g)}
-                  className="rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1 text-sm text-emerald-800 active:scale-95 disabled:opacity-50 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
-                >
-                  🎯 {g.title}
-                  {amount !== null && <span className="ml-1 text-xs opacity-75">{fmtAmount(amount, g.unit)}</span>}
-                </button>
-              );
-            })}
+            {goalOptions.map((g) => (
+              <button
+                key={g.id}
+                type="button"
+                disabled={addPlan.isPending}
+                onClick={() => chooseGoal(g)}
+                className="rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1 text-sm text-emerald-800 active:scale-95 disabled:opacity-50 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+              >
+                🎯 {g.title}
+              </button>
+            ))}
           </div>
         </div>
       )}
