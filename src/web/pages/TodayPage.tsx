@@ -12,7 +12,7 @@ import type { Category, NextItem, NextKind, Task } from '../../shared/types.ts';
 import { api, useCategories, useOverlay, useSettings, useToday, useWrite } from '../api.ts';
 import { PageHeader } from '../components/Layout.tsx';
 import { FlowSection, useNow } from '../components/TodayFlow.tsx';
-import { TaskRow } from '../components/TaskRow.tsx';
+import { CloseButton, TaskRow } from '../components/TaskRow.tsx';
 import { useLocalState } from '../storage.ts';
 import { toast } from '../toast.ts';
 import { addDays, CARD, cx, fmtDate, fmtMonthDay, fmtSpan } from '../util.ts';
@@ -278,20 +278,6 @@ function PlanButtons({ task: t, today, planned }: { task: Task; today: string; p
         明日
       </button>
     </>
-  );
-}
-
-/** 子が全部終わった親を閉じる（親のかかった時間は聞かない・design 4-3） */
-function CloseButton({ task: t }: { task: Task }) {
-  const close = useWrite(() => api.update(t.id, { status: 'done' }));
-  return (
-    <button
-      type="button"
-      className="rounded-md border border-emerald-500 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
-      onClick={() => close.mutate(undefined, { onSuccess: () => toast(`${t.code} を閉じた`) })}
-    >
-      閉じる
-    </button>
   );
 }
 

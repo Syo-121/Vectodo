@@ -9,8 +9,9 @@ import { api, useAllTasks, useCategories, useSettings, useWrite, type AllParams 
 import { DayView } from '../board/DayView.tsx';
 import { KanbanView, AXES } from '../board/KanbanView.tsx';
 import { BottleneckView, MatrixView, PlanView, ReviewView } from '../board/ListViews.tsx';
-import { moveDoDate, planQueue, bottlenecks, type Axis } from '../board/logic.ts';
+import { moveDoDate, planQueue, bottlenecks, projectTree, type Axis } from '../board/logic.ts';
 import { MonthView } from '../board/MonthView.tsx';
+import { ProjectsView } from '../board/ProjectsView.tsx';
 import { SeriesView } from '../board/SeriesView.tsx';
 import { WeekView } from '../board/WeekView.tsx';
 import { FarNotice } from '../components/FarNotice.tsx';
@@ -21,13 +22,14 @@ import { hiddenFromPlan, splitFar } from '../horizon.ts';
 import { useLocalState } from '../storage.ts';
 import { addDays, clientToday, cx, isOpenTask } from '../util.ts';
 
-type View = 'kanban' | 'day' | 'week' | 'month' | 'series' | 'matrix' | 'plan' | 'bottleneck' | 'review';
+type View = 'kanban' | 'day' | 'week' | 'month' | 'projects' | 'series' | 'matrix' | 'plan' | 'bottleneck' | 'review';
 
 const VIEWS: [View, string][] = [
   ['kanban', 'カンバン'],
   ['day', '日'],
   ['week', '週'],
   ['month', '月'],
+  ['projects', 'プロジェクト'],
   ['series', 'シリーズ'],
   ['matrix', '重要×緊急'],
   ['plan', '計画待ち'],
@@ -107,6 +109,9 @@ export function BoardPage() {
   const listed = showFar ? action.shown : near;
   const planned = listed.filter((t) => !hiddenFromPlan(t, categories));
   const horizonView = view === 'kanban' || view === 'matrix' || view === 'plan';
+  // プロジェクト（design 7-14）: 子を持つ親の木。絞り込みはいちばん上の親に当てる
+  const allProjects = view === 'projects' ? projectTree(all) : [];
+  const projects = allProjects.filter((p) => applyFilter([p.task], filter, today).length > 0);
   const activeCats = cats.filter((c) => !c.archived);
   // カテゴリで絞っているときは、カンバンのカテゴリ列も選んだものだけにする
   const kanbanCats = filter.categories.length ? cats.filter((c) => filter.categories.includes(c.id)) : cats;
@@ -180,7 +185,7 @@ export function BoardPage() {
                 シリーズ（親）も出す
               </label>
             )}
-            {view !== 'bottleneck' && (
+            {view !== 'bottleneck' && view !== 'projects' && (
               <label className="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-300">
                 <input type="checkbox" checked={withBlocked} onChange={(e) => setWithBlocked(e.target.checked)} />
                 依存待ちを含める
@@ -199,8 +204,8 @@ export function BoardPage() {
               onChange={setFilter}
               categories={activeCats}
               statuses={STATUSES}
-              shown={(view === 'bottleneck' ? raw.withAllBlocked : view === 'plan' ? planned : horizonView ? listed : tasks).length}
-              total={(horizonView ? actionBase : all).length}
+              shown={(view === 'projects' ? projects : view === 'bottleneck' ? raw.withAllBlocked : view === 'plan' ? planned : horizonView ? listed : tasks).length}
+              total={(view === 'projects' ? allProjects : horizonView ? actionBase : all).length}
             />
             {horizonView && (
               <div className="mt-2.5">
@@ -230,6 +235,8 @@ export function BoardPage() {
         <WeekView {...common} pool={actionBase} capacityMin={settings?.dailyCapacityMin ?? 360} onSetDates={onSetDates} overlay={overlay} />
       ) : view === 'month' ? (
         <MonthView {...common} onMoveDate={onMoveDate} overlay={overlay} />
+      ) : view === 'projects' ? (
+        <ProjectsView projects={projects} today={today} categories={categories} />
       ) : view === 'series' ? (
         <SeriesView today={today} categories={categories} />
       ) : view === 'matrix' ? (

@@ -3,6 +3,7 @@ import { rankNext } from '../src/shared/next.ts';
 import { askToClose, forAction, forCalendar, isContainer, nextSteps } from '../src/shared/series.ts';
 import type { Task } from '../src/shared/types.ts';
 import { taskLine } from '../src/server/format.ts';
+import { projectTree } from '../src/web/board/logic.ts';
 import { setup } from './helpers.ts';
 
 const TODAY = '2026-10-20';
@@ -192,5 +193,36 @@ describe('今日の画面と MCP（design 4-3）', () => {
     tasks.update(rest!.id, { status: 'done' });
     const [closed] = tasks.all({ q: 'ブログ' });
     expect(taskLine(closed!, new Map())).toContain('子2/2 全部済');
+  });
+});
+
+describe('プロジェクト一覧（design 7-14）', () => {
+  it('いちばん上の親ごとの木・締切（無ければ工程の締切）の近い順・締切なしは後ろ', () => {
+    const { tasks } = setup(TODAY);
+    const dev = tasks.create({ title: '開発' });
+    const feat = tasks.create({ title: '機能A', parentId: dev.id });
+    const design = tasks.create({ title: '設計', parentId: feat.id });
+    tasks.create({ title: '実装', parentId: feat.id, dependsOn: [design.id] });
+    const blog = tasks.create({ title: 'ブログ', dueDate: '2026-11-01' });
+    tasks.create({ title: 'ネタ', parentId: blog.id });
+    const flu = tasks.create({ title: '予防接種' });
+    tasks.create({ title: '接種', parentId: flu.id, dueDate: '2026-10-28' });
+    const done = tasks.create({ title: '申請', dueDate: '2026-10-30' });
+    const paper = tasks.create({ title: '書類', parentId: done.id });
+    tasks.update(paper.id, { status: 'done' });
+    tasks.create({ title: '単発' });
+
+    const tree = projectTree(tasks.all());
+    expect(tree.map((p) => [p.task.title, p.nextDue])).toEqual([
+      ['予防接種', '2026-10-28'],
+      ['申請', '2026-10-30'],
+      ['ブログ', '2026-11-01'],
+      ['開発', null],
+    ]);
+    const devNode = tree.find((p) => p.task.id === dev.id)!;
+    expect(devNode.subs.map((s) => s.task.title)).toEqual(['機能A']);
+    expect(devNode.next.map((t) => t.title)).toEqual(['設計']);
+    expect(devNode.subs[0]!.waiting).toBe(1);
+    expect(tree.find((p) => p.task.id === done.id)!.finished).toBe(true);
   });
 });
