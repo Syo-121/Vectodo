@@ -7,6 +7,7 @@ import { anchorLabel, flatten } from '../../shared/templates.ts';
 import type { Category, Template } from '../../shared/types.ts';
 import { api, useCategories, useCategoryWrite, useSettings, useTemplates, useTemplateWrite, useWrite, type AppSettings } from '../api.ts';
 import { PageHeader } from '../components/Layout.tsx';
+import { ADD_AFTER, useAddAfter } from '../addAfter.ts';
 import { NOTE_FONTS, noteFontPx, useNoteFont } from '../noteFont.ts';
 import { setThemePref, useThemePref, type ThemePref } from '../theme.ts';
 import { toast } from '../toast.ts';
@@ -75,6 +76,9 @@ export function SettingsPage() {
       <h2 className={H2}>今日・ボード</h2>
       <DayRangeSetting />
       <CapacitySetting />
+
+      <h2 className={H2}>追加</h2>
+      <AddAfterSetting />
 
       <h2 className={H2}>表示</h2>
       <ThemeSetting />
@@ -368,6 +372,36 @@ function ThemeSetting() {
         ))}
       </div>
       <p className="mt-2.5 text-xs text-zinc-400">この端末だけの設定（スマホと PC で別々に選べる）。</p>
+    </div>
+  );
+}
+
+/** ＋で追加したあと、開いたまま続けて入れるか 1件で閉じるか（design 7-2・端末ごと） */
+function AddAfterSetting() {
+  const [after, setAfter] = useAddAfter();
+  return (
+    <div className={cx(CARD, 'p-4')}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-sm">追加したあと</span>
+        {ADD_AFTER.map(([v, label]) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => setAfter(v)}
+            className={cx(
+              'rounded-md border px-3 py-1.5 text-sm',
+              after === v
+                ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300'
+                : 'border-zinc-300 text-zinc-600 dark:border-zinc-700 dark:text-zinc-300',
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <p className="mt-2.5 text-xs leading-relaxed text-zinc-400">
+        ＋で開く入力（タスク・メモ）を、保存したあと開いたままにするか閉じるか。閉じるのは保存できたときだけ。この端末だけの設定（スマホと PC で別々に選べる）。
+      </p>
     </div>
   );
 }
