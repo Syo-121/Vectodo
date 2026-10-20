@@ -40,6 +40,11 @@ export function defaultStart(kind: 'rate' | 'total', period: GoalPeriod | null, 
   return kind === 'rate' && period ? periodStart(period, today) : today;
 }
 
+/** 記録できるいちばん前の日: 期間ごとは数え始める日を含む期間の頭（週の途中から始めてもその週は入れられる）、期限までは数え始める日 */
+export function logFrom(g: Pick<GoalRule, 'kind' | 'period' | 'startDate'>): string {
+  return g.kind === 'rate' && g.period ? periodStart(g.period, g.startDate) : g.startDate;
+}
+
 /**
  * 進み具合。logs は日付ごとの量（同じ日が何件あってもよい）。
  * - rate: 今の期間の合計・最近の期間（古い順・今の期間まで）・連続達成（今の期間は達成していれば数え、まだなら飛ばす）・
@@ -170,7 +175,7 @@ export function paceText(p: GoalProgress): string {
 }
 
 /** 目安の数: 10 以上は整数、それより小さければ小数第1位まで */
-function approx(n: number): number {
+export function approx(n: number): number {
   return n >= 10 ? Math.round(n) : Math.round(n * 10) / 10;
 }
 

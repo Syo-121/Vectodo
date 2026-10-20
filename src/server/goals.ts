@@ -1,7 +1,7 @@
 // 目標と、その記録（設計の正= docs/design.md 3-6f・4-13）。進み具合は shared/goals.ts で毎回計算する。
 
 import type { Clock } from '../shared/dates.ts';
-import { defaultStart, goalProgress } from '../shared/goals.ts';
+import { defaultStart, goalProgress, logFrom } from '../shared/goals.ts';
 import { formatGoalCode, parseGoalRef } from '../shared/ids.ts';
 import type { GoalCreateInput, GoalLogInput, GoalPatchInput } from '../shared/schemas.ts';
 import type { Goal, GoalDetail, GoalLog } from '../shared/types.ts';
@@ -190,7 +190,7 @@ export class GoalService {
     const today = this.clock.today();
     const date = input.date ?? today;
     if (date > today) throw badRequest('先の日付には記録できない');
-    const from = g.kind === 'rate' && g.period ? defaultStart('rate', g.period, g.startDate) : g.startDate;
+    const from = logFrom(g);
     if (date < from) throw badRequest(`数え始める日（${from}）より前には記録できない`);
     this.db
       .prepare('INSERT INTO goal_logs (goal_id, date, amount, note, created_at) VALUES (?, ?, ?, ?, ?)')
