@@ -64,7 +64,7 @@ describe('親はまとめ役（design 4-3）', () => {
     expect(list[1]!.dueDate).toBeNull();
   });
 
-  it('子が全部終わった親は並べるビューに残る（閉じるまで）・日付のビューでは親のやる日を消して締切だけ残す', () => {
+  it('子が全部終わった親は並べるビューから外す（「閉じる？」で聞く）・日付のビューでは親のやる日を消して締切だけ残す', () => {
     const finished = task({ title: '済んだ親', dueDate: '2026-10-25', children: { total: 2, done: 2 } });
     const container = task({
       title: '続く親',
@@ -73,7 +73,7 @@ describe('親はまとめ役（design 4-3）', () => {
       children: { total: 2, done: 1 },
     });
     expect(isContainer(finished)).toBe(false);
-    expect(forAction([finished]).map((t) => t.title)).toEqual(['済んだ親']);
+    expect(forAction([finished])).toEqual([]);
     const [cal] = forCalendar([container]);
     expect(cal).toMatchObject({ dueDate: '2026-10-28', doDates: [] });
   });
@@ -89,10 +89,11 @@ describe('親はまとめ役（design 4-3）', () => {
     expect(steps.get(a.id)!.map((t) => t.title)).toEqual(['A1']);
   });
 
-  it('「閉じる？」は子が全部終わって、締切かやる日がある親だけ', () => {
+  it('「閉じる？」は子が全部終わって、締切かやる日がある親か、中間の親（締切なしでも）', () => {
     expect(askToClose(task({ dueDate: '2026-10-25', children: { total: 2, done: 2 } }))).toBe(true);
     expect(askToClose(task({ doDates: [{ date: TODAY, minutes: null }], children: { total: 1, done: 1 } }))).toBe(true);
     expect(askToClose(task({ title: '開発', children: { total: 2, done: 2 } }))).toBe(false);
+    expect(askToClose(task({ title: '機能', parentId: 1, children: { total: 2, done: 2 } }))).toBe(true);
     expect(askToClose(task({ dueDate: '2026-10-25', children: { total: 2, done: 1 } }))).toBe(false);
     expect(askToClose(task({ dueDate: '2026-10-25' }))).toBe(false);
   });
@@ -101,6 +102,56 @@ describe('親はまとめ役（design 4-3）', () => {
     const finished = task({ title: '済んだ親', doDates: [{ date: TODAY, minutes: null }], children: { total: 1, done: 1 } });
     const single = task({ title: 'ふつう', doDates: [{ date: TODAY, minutes: null }] });
     expect(rankNext([finished, single], TODAY).map((n) => n.task.title)).toEqual(['ふつう']);
+  });
+});
+
+describe('2段目の親（子を持つ子・design 4-2・4-3）', () => {
+  it('親が依存待ちなら、その子孫も依存待ち（いちばん近い祖先を waitVia に）・次の工程にも入れない', () => {
+    const { tasks } = setup(TODAY);
+    const project = tasks.create({ title: '開発' });
+    const a = tasks.create({ title: '機能A', parentId: project.id, dueDate: '2026-10-25' });
+    const a1 = tasks.create({ title: 'A-設計', parentId: a.id });
+    const b = tasks.create({ title: '機能B', parentId: project.id, dependsOn: [a.id], dueDate: '2026-10-24' });
+    const b1 = tasks.create({ title: 'B-設計', parentId: b.id });
+    const b11 = tasks.create({ title: 'B-設計-下調べ', parentId: b1.id });
+    const all = tasks.all();
+    const get = (id: number) => all.find((t) => t.id === id)!;
+    expect(get(b1.id)).toMatchObject({ blocked: true, waitVia: { id: b.id } });
+    // 孫は、自分が待っている祖先（＝待たせている元）を指す。間の B-設計 は自分では待っていない
+    expect(get(b11.id)).toMatchObject({ blocked: true, waitVia: { id: b.id } });
+    expect(get(a1.id).blocked).toBe(false);
+    expect(get(a1.id).waitVia).toBeUndefined();
+    expect(nextSteps(all).get(project.id)!.map((t) => t.title)).toEqual(['A-設計']);
+    // 機能B の締切（10/24）は、待っている子孫に受け継がない
+    const acting = forAction(all);
+    expect(acting.find((t) => t.id === b11.id)!.dueDate).toBeNull();
+    expect(rankNext(all, TODAY).map((n) => n.task.title)).toEqual(['A-設計']);
+    expect(taskLine(get(b11.id), new Map())).toContain(`依存待ち:親${b.code}`);
+    // 機能A が終われば、B の下も動き出す
+    tasks.update(a1.id, { status: 'done' });
+    tasks.update(a.id, { status: 'done' });
+    const after = tasks.all();
+    expect(after.find((t) => t.id === b11.id)!.blocked).toBe(false);
+    expect(nextSteps(after).get(project.id)!.map((t) => t.title)).toEqual(['B-設計-下調べ']);
+  });
+
+  it('状態が「待ち」の親の子孫も待ち', () => {
+    const { tasks } = setup(TODAY);
+    const parent = tasks.create({ title: '申請', status: 'waiting' });
+    const child = tasks.create({ title: '書類', parentId: parent.id });
+    expect(tasks.all().find((t) => t.id === child.id)).toMatchObject({ blocked: true, waitVia: { id: parent.id } });
+  });
+
+  it('工程が全部終わった中間の親は、締切なしでも「閉じる？」へ・並べる画面と次の工程からは外す', () => {
+    const { tasks } = setup(TODAY);
+    const project = tasks.create({ title: '開発' });
+    const c = tasks.create({ title: '機能C', parentId: project.id });
+    const c1 = tasks.create({ title: 'C-実装', parentId: c.id });
+    tasks.update(c1.id, { status: 'done' });
+    const all = tasks.all();
+    expect(forAction(all).map((t) => t.title)).toEqual([]);
+    expect(nextSteps(all).get(project.id)).toEqual([]);
+    expect(tasks.today().closable.map((t) => t.title)).toEqual(['機能C']);
   });
 });
 

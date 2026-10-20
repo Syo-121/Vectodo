@@ -152,6 +152,11 @@ export function TaskMeta({
           {waitingOn.length > 1 && ` ほか${waitingOn.length - 1}`}
         </span>
       )}
+      {isOpenTask(t) && waitingOn.length === 0 && t.waitVia && (
+        <span className="max-w-full truncate">
+          ⛓ 親が待ち: {t.waitVia.code} {t.waitVia.title}
+        </span>
+      )}
     </div>
   );
 }

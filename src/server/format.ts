@@ -46,6 +46,7 @@ export function taskLine(t: Task, cats: Map<number, Category>, steps?: Map<numbe
   parts.push(STATUS_LABEL[t.status]);
   const waitingOn = t.dependsOn.filter((d) => isOpen(d.status));
   if (waitingOn.length) parts.push(`依存待ち:${waitingOn.map((d) => d.code).join(',')}`);
+  else if (isOpen(t.status) && t.waitVia) parts.push(`依存待ち:親${t.waitVia.code}`);
   if (isContainer(t)) {
     parts.push(`シリーズ${t.children.done}/${t.children.total}`);
     const next = steps?.get(t.id);

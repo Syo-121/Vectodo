@@ -775,6 +775,25 @@ export class TaskService {
       kids.set(k.parent_id, { total: k.total, done: k.done ?? 0 });
     }
 
+    // 祖先（親・その上）が依存待ちか「待ち」なら、子孫も手を付けられない（design 4-2・4-3）。いちばん近いその祖先を覚える
+    const waitVia = new Map<number, TaskRef>();
+    for (const a of this.db
+      .prepare(
+        `WITH RECURSIVE up(task_id, anc_id, depth) AS (
+           SELECT id, parent_id, 1 FROM tasks WHERE id IN (${ph}) AND parent_id IS NOT NULL
+           UNION ALL
+           SELECT up.task_id, p.parent_id, up.depth + 1 FROM up JOIN tasks p ON p.id = up.anc_id
+           WHERE p.parent_id IS NOT NULL AND up.depth < 20)
+         SELECT up.task_id, a.id, a.title, a.status FROM up JOIN tasks a ON a.id = up.anc_id
+         WHERE a.status IN ${OPEN_SQL} AND (a.status = 'waiting' OR EXISTS (
+           SELECT 1 FROM dependencies d JOIN tasks x ON x.id = d.depends_on_id
+           WHERE d.task_id = a.id AND x.status IN ${OPEN_SQL}))
+         ORDER BY up.task_id, up.depth`,
+      )
+      .all(...ids) as { task_id: number; id: number; title: string; status: Status }[]) {
+      if (!waitVia.has(a.task_id)) waitVia.set(a.task_id, toRef(a));
+    }
+
     const parentIds = [...new Set(rows.map((r) => r.parent_id).filter((x): x is number => x !== null))];
     const parentTitles = new Map<number, string>();
     if (parentIds.length) {
@@ -797,6 +816,7 @@ export class TaskService {
 
     return rows.map((r) => {
       const dependsOn = deps.get(r.id) ?? [];
+      const via = waitVia.get(r.id);
       return {
         id: r.id,
         code: formatTaskCode(r.id),
@@ -819,7 +839,8 @@ export class TaskService {
         completedAt: r.completed_at,
         doDates: dates.get(r.id) ?? [],
         dependsOn,
-        blocked: dependsOn.some((d) => isOpen(d.status)),
+        blocked: dependsOn.some((d) => isOpen(d.status)) || via !== undefined,
+        ...(via ? { waitVia: via } : {}),
         children: kids.get(r.id) ?? { total: 0, done: 0 },
       };
     });
