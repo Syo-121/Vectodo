@@ -9,8 +9,9 @@ import { Link } from 'react-router';
 import { dayFlow, fmtClock } from '../../shared/flow.ts';
 import { duePassed, NEXT_COUNT, nextReason, TODAY_KINDS } from '../../shared/next.ts';
 import type { Category, NextItem, NextKind, Task } from '../../shared/types.ts';
-import { api, useCategories, useGoals, useOverlay, useSettings, useToday, useWrite } from '../api.ts';
+import { api, useCategories, useGoalPlans, useGoals, useOverlay, useSettings, useToday, useWrite } from '../api.ts';
 import { GoalTodayRow } from '../components/GoalParts.tsx';
+import { planTask } from '../goalPlans.ts';
 import { PageHeader } from '../components/Layout.tsx';
 import { FlowSection, useNow } from '../components/TodayFlow.tsx';
 import { CloseButton, TaskRow } from '../components/TaskRow.tsx';
@@ -44,17 +45,20 @@ export function TodayPage() {
   // 目標は、いま数えているもの（始まっていない・終わったものは出さない）
   const { data: goals = [] } = useGoals();
   const activeGoals = goals.filter((g) => !g.progress.notStarted && !g.progress.ended);
+  // 今日の目標をやる時間（design 4-14）。まだのものは置いたタスクと同じに今日の流れへ混ぜる
+  const { data: plans = [] } = useGoalPlans(v?.today ?? '', v?.today ?? '', !!v);
 
   if (isLoading || !v) return <p className="p-4 text-sm text-zinc-400">読み込み中…</p>;
   const today = v.today;
   const connected = gcal?.connected ?? false;
   const dayStart = settings?.dayStartMin ?? 8 * 60;
   const dayEnd = settings?.dayEndMin ?? 23 * 60;
+  const placed = [...v.placed, ...plans.filter((p) => !p.done && p.start).map(planTask)];
   const flow = dayFlow({
     today,
     events: gcal?.events ?? [],
     deadlines: v.deadlines,
-    placed: v.placed,
+    placed,
     now,
     dayStart,
     dayEnd,
@@ -131,13 +135,13 @@ export function TodayPage() {
           </h2>
           <div className={CARD}>
             {activeGoals.map((g) => (
-              <GoalTodayRow key={g.id} g={g} />
+              <GoalTodayRow key={g.id} g={g} plans={plans.filter((p) => p.goalId === g.id)} />
             ))}
           </div>
         </section>
       )}
 
-      {(connected || v.deadlines.length > 0 || v.placed.length > 0) && (
+      {(connected || v.deadlines.length > 0 || placed.length > 0) && (
         <FlowSection
           flow={flow}
           now={now}
@@ -146,7 +150,7 @@ export function TodayPage() {
           dayStart={dayStart}
           dayEnd={dayEnd}
           candidates={v.ranked.filter((n) => !v.placed.some((t) => t.id === n.task.id))}
-          placed={v.placed}
+          placed={placed}
           deadlines={v.deadlines}
           events={gcal?.events ?? []}
         />

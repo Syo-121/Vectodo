@@ -7,10 +7,10 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { addDays, diffDays } from '../../shared/dates.ts';
 import { approx, fmtAmount, goalRuleText, periodCounter, round } from '../../shared/goals.ts';
 import { parseGoalRef } from '../../shared/ids.ts';
-import type { Goal, GoalDetail } from '../../shared/types.ts';
+import type { Goal, GoalDetail, GoalPlan } from '../../shared/types.ts';
 import { api, useGoal, useGoalWrite } from '../api.ts';
 import { GoalBar } from '../components/GoalParts.tsx';
-import { GoalFormSheet, LogSheet } from '../components/GoalSheets.tsx';
+import { GoalFormSheet, LogSheet, PlanCreateSheet } from '../components/GoalSheets.tsx';
 import { currentHeading, currentSum, goalCalendar, groupLogs, isAchieved, isLoggable, minMonthOffset, statusText } from '../goalView.ts';
 import { toast } from '../toast.ts';
 import { CARD, clientToday, cx, fmtDate, fmtMonthDay } from '../util.ts';
@@ -24,6 +24,8 @@ export function GoalDetailPage() {
   const today = clientToday();
   const [logDate, setLogDate] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [openPlan, setOpenPlan] = useState<GoalPlan | null>(null);
+  const [addingPlan, setAddingPlan] = useState(false);
 
   if (isLoading) return <p className="p-4 text-sm text-zinc-400">読み込み中…</p>;
   if (!g) {
@@ -61,6 +63,7 @@ export function GoalDetailPage() {
           <Calendar g={g} today={today} onPick={setLogDate} />
         </div>
         <div className="space-y-4">
+          <Plans g={g} today={today} onOpen={setOpenPlan} onAdd={() => setAddingPlan(true)} />
           <Records g={g} today={today} onPick={setLogDate} />
           {g.notes.trim() && (
             <section className={cx(SECTION, 'p-4')}>
@@ -72,8 +75,60 @@ export function GoalDetailPage() {
       </div>
 
       {logDate && <LogSheet g={g} date={logDate} onClose={() => setLogDate(null)} />}
+      {openPlan && <LogSheet g={g} plan={openPlan} onClose={() => setOpenPlan(null)} />}
+      {addingPlan && <PlanCreateSheet goal={g} date={today} onClose={() => setAddingPlan(false)} />}
       {editing && <GoalFormSheet goal={g} onClose={() => setEditing(false)} />}
     </div>
+  );
+}
+
+/**
+ * やる時間（design 4-14）: 今日から先のまだのものと、過ぎてもまだのもの（やらなかった）を日付順に。押すと記録のシート。
+ * ［＋ やる時間を入れる］。時間割（今日・ボードの日・週）でドラッグして置くこともできる
+ */
+function Plans({ g, today, onOpen, onAdd }: { g: GoalDetail; today: string; onOpen: (p: GoalPlan) => void; onAdd: () => void }) {
+  const upcoming = g.plans.filter((p) => p.date >= today && !p.done);
+  const missed = g.plans.filter((p) => p.date < today && !p.done && p.date >= addDays(today, -7));
+  const row = (p: GoalPlan, past: boolean) => (
+    <button
+      key={p.id}
+      type="button"
+      onClick={() => onOpen(p)}
+      className="flex w-full items-baseline gap-3 border-b border-zinc-200/70 px-4 py-2.5 text-left text-sm last:border-b-0 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800/40"
+    >
+      <span className={cx('w-20 shrink-0', past ? 'text-zinc-400' : 'text-zinc-500')}>{fmtDate(p.date, today)}</span>
+      <span className={cx('shrink-0 tabular-nums', past ? 'text-zinc-400' : 'font-semibold text-emerald-700 dark:text-emerald-300')}>
+        {p.start ? `${p.start}〜` : '時刻なし'}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-zinc-500">
+        {p.amount !== null && fmtAmount(p.amount, p.unit)}
+        {past && <span className="ml-1 text-amber-600 dark:text-amber-400">まだ記録していない</span>}
+      </span>
+      <span className="text-zinc-300 dark:text-zinc-600">›</span>
+    </button>
+  );
+  if (g.archived) return null;
+  return (
+    <section className={cx(SECTION, 'overflow-hidden')}>
+      <h3 className="flex items-baseline px-4 pt-4 pb-2 text-sm font-semibold">
+        やる時間
+        <span className="ml-2 text-xs font-normal text-zinc-400">時間割に緑で出て、Google にも入る</span>
+      </h3>
+      {upcoming.length === 0 && missed.length === 0 && (
+        <p className="px-4 pb-2 text-sm text-zinc-400">まだ決めていない。下のボタンか、今日・ボードの時間割で時間を選んで置ける。</p>
+      )}
+      {missed.map((p) => row(p, true))}
+      {upcoming.map((p) => row(p, false))}
+      <div className="p-3">
+        <button
+          type="button"
+          onClick={onAdd}
+          className="w-full rounded-xl border border-dashed border-emerald-400 py-2 text-sm text-emerald-700 dark:border-emerald-800 dark:text-emerald-300"
+        >
+          🎯 やる時間を入れる
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -135,6 +190,8 @@ function Calendar({ g, today, onPick }: { g: GoalDetail; today: string; onPick: 
   const [offset, setOffset] = useState(0);
   const min = minMonthOffset(g, today);
   const cal = goalCalendar(g, g.logs, today, offset);
+  // まだ済んでいないやる時間がある日（緑の点）
+  const planned = new Set(g.plans.filter((p) => !p.done).map((p) => p.date));
   const weekly = g.kind === 'rate' && g.period === 'week';
   const cols = weekly ? 'grid-cols-[repeat(7,minmax(0,1fr))_3.25rem]' : 'grid-cols-7';
   const monthTotal =
@@ -175,10 +232,10 @@ function Calendar({ g, today, onPick }: { g: GoalDetail; today: string; onPick: 
         ))}
         {weekly && <div className="pb-1 text-[11px] text-zinc-400">週</div>}
         {cal.weeks.map((week) => (
-          <WeekRow key={week.days[0]!.date} week={week} g={g} weekly={weekly} onPick={onPick} />
+          <WeekRow key={week.days[0]!.date} week={week} g={g} weekly={weekly} planned={planned} onPick={onPick} />
         ))}
       </div>
-      <p className="mt-3 text-center text-[11px] text-zinc-400">日付を押すと、その日の記録を足す・消す</p>
+      <p className="mt-3 text-center text-[11px] text-zinc-400">日付を押すと、その日の記録を足す・消す（緑の点＝やる時間を入れた日）</p>
     </section>
   );
 }
@@ -187,11 +244,13 @@ function WeekRow({
   week,
   g,
   weekly,
+  planned,
   onPick,
 }: {
   week: ReturnType<typeof goalCalendar>['weeks'][number];
   g: Goal;
   weekly: boolean;
+  planned: Set<string>;
   onPick: (date: string) => void;
 }) {
   const daily = g.kind === 'rate' && g.period === 'day';
@@ -205,7 +264,7 @@ function WeekRow({
           onClick={() => onPick(d.date)}
           aria-label={`${d.date} ${d.sum ? fmtAmount(d.sum, g.unit) : '記録なし'}`}
           className={cx(
-            'flex h-12 flex-col items-center rounded-lg pt-1 transition active:scale-95',
+            'relative flex h-12 flex-col items-center rounded-lg pt-1 transition active:scale-95',
             !d.inMonth && 'opacity-40',
             !d.loggable && 'cursor-default text-zinc-300 dark:text-zinc-700',
             d.sum > 0 &&
@@ -220,6 +279,7 @@ function WeekRow({
         >
           <span className={cx('text-[11px] leading-none', d.isToday && 'font-bold')}>{Number(d.date.slice(8))}</span>
           {d.sum > 0 && <span className="mt-1 text-sm leading-none font-bold tabular-nums">{d.sum}</span>}
+          {planned.has(d.date) && <span className="absolute bottom-1 size-1.5 rounded-full bg-emerald-500" aria-label="やる時間あり" />}
         </button>
       ))}
       {weekly && (

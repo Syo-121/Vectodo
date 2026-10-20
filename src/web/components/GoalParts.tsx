@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { currentWord, fmtAmount, goalRuleText, periodCounter } from '../../shared/goals.ts';
-import type { Goal } from '../../shared/types.ts';
+import type { Goal, GoalPlan } from '../../shared/types.ts';
 import { api } from '../api.ts';
 import { currentSum, isAchieved, isLoggable, spanText, statusText } from '../goalView.ts';
 import { sendOrQueue } from '../outbox.ts';
@@ -18,15 +18,15 @@ import { LogSheet } from './GoalSheets.tsx';
  */
 export function useLogGoal() {
   const qc = useQueryClient();
-  return async (g: Goal, input: { amount?: number; date?: string; note?: string } = {}): Promise<boolean> => {
+  return async (g: Goal, input: { amount?: number; date?: string; note?: string; planId?: number } = {}): Promise<boolean> => {
     const today = clientToday();
     const amount = input.amount ?? 1;
     const date = input.date ?? today;
     const what = `${g.title} ＋${fmtAmount(amount, g.unit)}${date === today ? '' : `（${fmtDate(date, today)}）`}`;
+    const body = { amount, date, note: input.note, planId: input.planId };
     try {
-      const d = await sendOrQueue(
-        { kind: 'goalLog', goalId: g.id, title: g.title, unit: g.unit, input: { amount, date, note: input.note } },
-        () => api.addGoalLog(g.id, { amount, date, note: input.note }),
+      const d = await sendOrQueue({ kind: 'goalLog', goalId: g.id, title: g.title, unit: g.unit, input: body }, () =>
+        api.addGoalLog(g.id, body),
       );
       if (!d) {
         toast(`つながっていないので溜めた: ${what}`);
@@ -140,11 +140,15 @@ export function sumText(g: Goal): string {
   return `${word}${currentSum(g)}/${fmtAmount(g.target, g.unit)}`;
 }
 
-/** 今日の画面の1行: 名前・目標の言い方・進み具合と状態・バー（押すと詳細へ）・記録のボタン */
-export function GoalTodayRow({ g }: { g: Goal }) {
+/**
+ * 今日の画面の1行: 名前・目標の言い方・進み具合と状態・今日のやる時間（まだのもの）・バー（押すと詳細へ）・記録のボタン。
+ * 記録すると、今日のまだのやる時間のうち最初のものが済になる（サーバが結ぶ）
+ */
+export function GoalTodayRow({ g, plans = [] }: { g: Goal; plans?: GoalPlan[] }) {
   const today = clientToday();
   const done = isAchieved(g);
   const streak = streakText(g);
+  const next = plans.filter((p) => !p.done);
   return (
     <div className="flex items-center gap-3 border-b border-zinc-200/70 px-3.5 py-3 last:border-b-0 dark:border-zinc-800">
       <Link to={`/goals/${g.id}`} className="min-w-0 flex-1">
@@ -159,6 +163,11 @@ export function GoalTodayRow({ g }: { g: Goal }) {
           <span className={cx('truncate', done ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-500')}>{statusText(g, today)}</span>
           {streak && <span className="shrink-0 text-amber-600 dark:text-amber-400">{streak}</span>}
         </div>
+        {next.length > 0 && (
+          <div className="mt-0.5 truncate text-xs text-emerald-700 dark:text-emerald-300">
+            🗓 {next.map((p) => `${p.start ?? '時刻なし'}${p.amount !== null ? ` ${fmtAmount(p.amount, p.unit)}` : ''}`).join('・')} にやる
+          </div>
+        )}
         <GoalBar g={g} className="mt-1.5 h-1.5" />
       </Link>
       <LogButton g={g} compact />

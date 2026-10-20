@@ -6,6 +6,8 @@ import type {
   GoalCreateInput,
   GoalLogInput,
   GoalPatchInput,
+  GoalPlanCreateInput,
+  GoalPlanPatchInput,
   MemoPatchInput,
   NoteCreateInput,
   NotePatchInput,
@@ -17,6 +19,7 @@ import type {
   Category,
   Goal,
   GoalDetail,
+  GoalPlan,
   Memo,
   Note,
   NoteLabel,
@@ -132,6 +135,10 @@ export const api = {
   deleteGoal: (id: number) => req<{ ok: true }>('DELETE', `/goals/${id}`),
   addGoalLog: (id: number, input: GoalLogInput) => req<GoalDetail>('POST', `/goals/${id}/logs`, input),
   deleteGoalLog: (id: number, logId: number) => req<GoalDetail>('DELETE', `/goals/${id}/logs/${logId}`),
+  goalPlans: (from: string, to: string) => req<GoalPlan[]>('GET', `/goal-plans?from=${from}&to=${to}`),
+  addGoalPlan: (goalId: number, input: GoalPlanCreateInput) => req<GoalPlan>('POST', `/goals/${goalId}/plans`, input),
+  updateGoalPlan: (id: number, patch: GoalPlanPatchInput) => req<GoalPlan>('PATCH', `/goal-plans/${id}`, patch),
+  deleteGoalPlan: (id: number) => req<{ ok: true }>('DELETE', `/goal-plans/${id}`),
   settings:() => req<AppSettings>('GET', '/settings'),
   updateSettings: (p: Partial<AppSettings>) => req<AppSettings>('PATCH', '/settings', p),
 };
@@ -184,6 +191,9 @@ export const useGoals = (archived = false) => useQuery({ queryKey: ['goals', arc
 export const useGoal = (id: number | null) =>
   useQuery({ queryKey: ['goals', 'detail', id], queryFn: () => api.goal(id!), enabled: id !== null });
 export const useGoalWrite = <A, R>(fn: (a: A) => Promise<R>) => useWrite(fn, [['goals']], { wait: false });
+/** 目標をやる時間（design 4-14）。goals の下に置いて、目標の書き込み（記録で済になる など）のたびに取り直す */
+export const useGoalPlans = (from: string, to: string, enabled = true) =>
+  useQuery({ queryKey: ['goals', 'plans', from, to], queryFn: () => api.goalPlans(from, to), enabled: enabled && !!from && !!to });
 
 export const useToday = () => useQuery({ queryKey: ['tasks', 'today'], queryFn: api.today });
 export const useInbox = () => useQuery({ queryKey: ['tasks', 'inbox'], queryFn: api.inbox });

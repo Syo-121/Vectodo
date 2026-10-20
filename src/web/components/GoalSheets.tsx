@@ -1,12 +1,15 @@
 // 目標のシート（design 7-15）: 記録する（量・日付・一言・その日の記録・記録したらどうなるか）と、目標を作る・書き換える。
+// やる時間（design 4-14）: 予定から開いた記録のシート（時間を変える・外す）と、月・詳細から入れるシート。
 // スマホは下から、広い画面は上寄りの真ん中に出す（即追加と同じ形）。
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { fmtClock, PLACE_DEFAULT_MIN, toMin } from '../../shared/flow.ts';
 import { defaultStart, fmtAmount, goalRuleText, logFrom, round } from '../../shared/goals.ts';
-import type { GoalCreateInput } from '../../shared/schemas.ts';
-import type { Goal, GoalPeriod } from '../../shared/types.ts';
-import { api, useGoal, useGoalWrite } from '../api.ts';
+import type { GoalCreateInput, GoalPlanCreateInput, GoalPlanPatchInput } from '../../shared/schemas.ts';
+import type { Goal, GoalPeriod, GoalPlan } from '../../shared/types.ts';
+import { api, useGoal, useGoals, useGoalWrite } from '../api.ts';
+import { planAmount } from '../goalPlans.ts';
 import { amountChips, previewLog, spanText } from '../goalView.ts';
 import { toast } from '../toast.ts';
 import { addDays, clientToday, cx, fmtDate, fmtMonthDay } from '../util.ts';
@@ -61,15 +64,18 @@ export function SheetFrame({
 
 /**
  * 記録するシート。量は大きい数字と［−］［＋］（押して打ち込んでもよい）・量のチップ、日付は今日・昨日・おととい・選ぶ、一言。
- * 選んだ日にもう記録があれば並べて、ここから消せる。押す前に「記録したらどうなるか」を見せる
+ * 選んだ日にもう記録があれば並べて、ここから消せる。押す前に「記録したらどうなるか」を見せる。
+ * plan（やる時間・design 4-14）を渡すと、上にその予定（時間を変える・外す）を出し、記録をその予定と結ぶ
  */
-export function LogSheet({ g, date: initial, onClose }: { g: Goal; date?: string; onClose: () => void }) {
+export function LogSheet({ g, date: initial, plan: given, onClose }: { g: Goal; date?: string; plan?: GoalPlan; onClose: () => void }) {
   const today = clientToday();
   const { data: d } = useGoal(g.id);
   const logs = d?.logs ?? [];
+  // 予定は取り直した中身で見る（時間を変えたらすぐ反映する）
+  const plan = given ? (d ? d.plans.find((p) => p.id === given.id) : given) : undefined;
   const from = logFrom(g);
-  const [date, setDate] = useState(initial ?? today);
-  const [value, setValue] = useState(g.unit === '回' ? '1' : '');
+  const [date, setDate] = useState(given?.date ?? initial ?? today);
+  const [value, setValue] = useState(given?.amount != null ? String(given.amount) : g.unit === '回' ? '1' : '');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const log = useLogGoal();
@@ -85,7 +91,9 @@ export function LogSheet({ g, date: initial, onClose }: { g: Goal; date?: string
   const submit = async () => {
     if (!valid || !loggable || busy) return;
     setBusy(true);
-    const ok = await log(g, { amount, date, note: note.trim() || undefined });
+    // 予定の日に記録するなら、その予定と結ぶ（別の日にしたら結ばない＝その日の予定があればサーバが結ぶ）
+    const planId = plan && !plan.done && plan.date === date ? plan.id : undefined;
+    const ok = await log(g, { amount, date, note: note.trim() || undefined, planId });
     setBusy(false);
     if (ok) onClose();
   };
@@ -104,6 +112,15 @@ export function LogSheet({ g, date: initial, onClose }: { g: Goal; date?: string
           void submit();
         }}
       >
+        {plan && (
+          <PlanBox
+            plan={plan}
+            from={from}
+            today={today}
+            onMoved={(to) => setDate(to)}
+            onRemoved={onClose}
+          />
+        )}
         {/* 量 */}
         <div className="flex items-center justify-center gap-5 py-2">
           <button
@@ -171,7 +188,15 @@ export function LogSheet({ g, date: initial, onClose }: { g: Goal; date?: string
               />
             </span>
           </div>
-          {!loggable && <p className="mt-1.5 text-xs text-amber-600">{date < from ? `${fmtDate(from, today)} より前は数えていない` : '先の日付には記録できない'}</p>}
+          {!loggable && (
+            <p className="mt-1.5 text-xs text-amber-600">
+              {date < from
+                ? `${fmtDate(from, today)} より前は数えていない`
+                : plan
+                  ? 'まだ先の予定（記録は当日から。いまは時間を変える・外すだけ）'
+                  : '先の日付には記録できない'}
+            </p>
+          )}
         </div>
 
         {/* 一言 */}
@@ -224,6 +249,233 @@ export function LogSheet({ g, date: initial, onClose }: { g: Goal; date?: string
           {busy ? '記録しています…' : valid ? `${fmtAmount(amount, g.unit)} を記録する` : '量を入れる'}
         </button>
       </form>
+    </SheetFrame>
+  );
+}
+
+const LENGTHS: [number, string][] = [
+  [15, '15m'],
+  [30, '30m'],
+  [60, '1h'],
+  [90, '1h30m'],
+  [120, '2h'],
+];
+
+/** 記録のシートの上に出す「やる時間」: いつか・済んだか、時間を変える（日付・時刻・長さ）・外す */
+function PlanBox({
+  plan,
+  from,
+  today,
+  onMoved,
+  onRemoved,
+}: {
+  plan: GoalPlan;
+  from: string;
+  today: string;
+  onMoved: (date: string) => void;
+  onRemoved: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const update = useGoalWrite((patch: GoalPlanPatchInput) => api.updateGoalPlan(plan.id, patch));
+  const remove = useGoalWrite(() => api.deleteGoalPlan(plan.id));
+  const minutes = plan.minutes ?? PLACE_DEFAULT_MIN;
+  const when = plan.start ? `${plan.start}–${fmtClock(toMin(plan.start) + minutes)}` : '時刻なし';
+  const small = 'rounded-md border border-emerald-300 px-2 py-1 text-xs dark:border-emerald-800';
+  return (
+    <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2.5 dark:border-emerald-900 dark:bg-emerald-950/40">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
+          🗓 {fmtDate(plan.date, today)} {when}
+        </span>
+        {plan.done && <span className="rounded-full bg-emerald-600 px-2 text-[11px] text-white">✓ 済</span>}
+        <span className="ml-auto flex gap-1.5">
+          <button type="button" onClick={() => setEditing(!editing)} className={cx(small, 'text-emerald-700 dark:text-emerald-300')}>
+            {editing ? '閉じる' : '時間を変える'}
+          </button>
+          <button
+            type="button"
+            disabled={remove.isPending}
+            onClick={() =>
+              remove.mutate(undefined, {
+                onSuccess: () => {
+                  toast('やる時間を外した');
+                  onRemoved();
+                },
+              })
+            }
+            className="rounded-md px-2 py-1 text-xs text-red-600 dark:text-red-400"
+          >
+            外す
+          </button>
+        </span>
+      </div>
+      {editing && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <input
+            type="date"
+            value={plan.date}
+            min={from}
+            aria-label="やる日"
+            onChange={(e) => {
+              const to = e.target.value;
+              if (!to) return;
+              update.mutate({ date: to });
+              onMoved(to);
+            }}
+            className={cx(INPUT, 'py-1')}
+          />
+          <input
+            type="time"
+            step={300}
+            value={plan.start ?? ''}
+            aria-label="始める時刻"
+            onChange={(e) => update.mutate({ start: e.target.value || null, minutes: plan.minutes ?? PLACE_DEFAULT_MIN })}
+            className={cx(INPUT, 'py-1')}
+          />
+          {plan.start && (
+            <>
+              {LENGTHS.map(([m, label]) => (
+                <button key={m} type="button" className={cx(chip(minutes === m), 'px-2.5 py-0.5 text-xs')} onClick={() => update.mutate({ minutes: m })}>
+                  {label}
+                </button>
+              ))}
+              <button type="button" className={cx(chip(false), 'px-2.5 py-0.5 text-xs')} onClick={() => update.mutate({ start: null })}>
+                時刻なし
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 時間割・月から押した「やる時間」: その目標の記録のシートを、予定つきで開く */
+export function PlanSheet({ plan, onClose }: { plan: GoalPlan; onClose: () => void }) {
+  const { data: g } = useGoal(plan.goalId);
+  return g ? <LogSheet g={g} plan={plan} onClose={onClose} /> : null;
+}
+
+/**
+ * やる時間を入れる（月ビュー・目標の詳細から。時間割では置くパネルから入れる）。目標・日付・時刻（無しでもよい）・長さ・量。
+ * goal を渡すとその目標に決めて開く
+ */
+export function PlanCreateSheet({ date: initial, goal: fixed, onClose }: { date: string; goal?: Goal; onClose: () => void }) {
+  const today = clientToday();
+  const { data: goals = [] } = useGoals();
+  const options = fixed ? [fixed] : goals.filter((x) => !x.progress.ended);
+  const [goalId, setGoalId] = useState<number | null>(fixed?.id ?? null);
+  const g = options.find((x) => x.id === goalId) ?? options[0];
+  const [date, setDate] = useState(initial);
+  const [start, setStart] = useState('');
+  const [minutes, setMinutes] = useState(PLACE_DEFAULT_MIN);
+  // 量は、触っていなければ目標に合わせた既定（planAmount）
+  const [amount, setAmount] = useState<string | null>(null);
+  const amountText = amount ?? (g ? String(planAmount(g) ?? '') : '');
+  const create = useGoalWrite((a: { goalId: number; input: GoalPlanCreateInput }) => api.addGoalPlan(a.goalId, a.input));
+  const n = Number(amountText);
+  const ok = g !== undefined && date >= logFrom(g) && (amountText.trim() === '' || (Number.isFinite(n) && n > 0));
+
+  const submit = () => {
+    if (!ok || !g || create.isPending) return;
+    create.mutate(
+      {
+        goalId: g.id,
+        input: { date, start: start || null, minutes: start ? minutes : null, amount: amountText.trim() ? n : null },
+      },
+      {
+        onSuccess: (p) => {
+          toast(`${p.title} を ${fmtDate(p.date, today)}${p.start ? ` ${p.start}` : ''} に入れた`);
+          onClose();
+        },
+      },
+    );
+  };
+
+  return (
+    <SheetFrame title="目標をやる時間を入れる" sub={fmtDate(date, today)} onClose={onClose}>
+      {options.length === 0 ? (
+        <p className="py-6 text-center text-sm text-zinc-500">目標が無い。目標タブの［＋ 目標］から作れる。</p>
+      ) : (
+        <form
+          className="space-y-5"
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit();
+          }}
+        >
+          {!fixed && (
+            <div>
+              <div className={LABEL}>目標</div>
+              <div className="mt-1.5 divide-y divide-zinc-200/70 rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+                {options.map((x) => (
+                  <button
+                    key={x.id}
+                    type="button"
+                    onClick={() => {
+                      setGoalId(x.id);
+                      setAmount(null);
+                    }}
+                    className={cx('flex w-full items-baseline gap-2 px-3 py-2.5 text-left', g?.id === x.id && 'bg-emerald-50 dark:bg-emerald-950/50')}
+                  >
+                    <span className={cx('size-3.5 shrink-0 self-center rounded-full border-2', g?.id === x.id ? 'border-emerald-600 bg-emerald-600' : 'border-zinc-300')} />
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{x.title}</span>
+                    <span className="shrink-0 text-xs text-zinc-400">{goalRuleText(x)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="block">
+              <span className={LABEL}>日付</span>
+              <input type="date" value={date} min={g ? logFrom(g) : undefined} onChange={(e) => e.target.value && setDate(e.target.value)} className={cx(INPUT, 'mt-1.5 block')} />
+            </label>
+            <label className="block">
+              <span className={LABEL}>始める時刻（任意）</span>
+              <input type="time" step={300} value={start} onChange={(e) => setStart(e.target.value)} className={cx(INPUT, 'mt-1.5 block')} />
+            </label>
+          </div>
+          {start && (
+            <div>
+              <div className={LABEL}>長さ</div>
+              <div className="mt-1.5 flex flex-wrap gap-2">
+                {LENGTHS.map(([m, label]) => (
+                  <button key={m} type="button" className={chip(minutes === m)} onClick={() => setMinutes(m)}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {g && (
+            <label className="block">
+              <span className={LABEL}>この時間にやる量（任意）</span>
+              <span className="mt-1.5 flex items-center gap-2">
+                <input
+                  inputMode="decimal"
+                  value={amountText}
+                  onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))}
+                  placeholder="量"
+                  className={cx(INPUT, 'w-24 text-center')}
+                />
+                <span className="text-sm text-zinc-500">{g.unit}</span>
+              </span>
+            </label>
+          )}
+          {g && date < logFrom(g) && <p className="text-xs text-amber-600">{fmtDate(logFrom(g), today)} より前には入れられない（数え始める前）</p>}
+          <p className="text-xs leading-relaxed text-zinc-500">
+            タスクにはしない。時間割と月に緑で出て、Google カレンダーにも【目標】として入る{start ? '（5分前に通知）' : ''}。記録すると済になる。
+          </p>
+          <button
+            type="submit"
+            disabled={!ok || create.isPending}
+            className="w-full rounded-xl bg-emerald-600 py-3 text-base font-semibold text-white disabled:opacity-40"
+          >
+            やる時間を入れる
+          </button>
+        </form>
+      )}
     </SheetFrame>
   );
 }
