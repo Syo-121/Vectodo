@@ -100,6 +100,9 @@ export function SeriesView({ today, categories }: { today: string; categories: M
   }, [fromUrl]);
   const id = fromUrl ?? (list?.some((s) => s.id === saved) ? saved : (list?.[0]?.id ?? null));
   const { data: graph } = useSeries(id);
+  // 子タスクの詳細の「シリーズの図で見る」から来たとき（&f=140）、そのタスクを光らせる
+  const f = Number(params.get('f'));
+  const focus = fromUrl !== null && Number.isSafeInteger(f) && f > 0 ? f : null;
 
   const choose = (next: number) => {
     setSaved(next);
@@ -107,6 +110,7 @@ export function SeriesView({ today, categories }: { today: string; categories: M
       (p) => {
         const n = new URLSearchParams(p);
         n.delete('s');
+        n.delete('f');
         return n;
       },
       { replace: true },
@@ -125,7 +129,7 @@ export function SeriesView({ today, categories }: { today: string; categories: M
     <div className="px-4 pb-6">
       <SeriesPicker list={list} value={id} onChange={choose} />
       {graph && id !== null ? (
-        <GraphPanel key={id} id={id} graph={graph} today={today} categories={categories} />
+        <GraphPanel key={id} id={id} graph={graph} today={today} categories={categories} focus={focus} />
       ) : (
         <p className="py-4 text-sm text-zinc-400">読み込み中…</p>
       )}
@@ -169,11 +173,14 @@ function GraphPanel({
   graph,
   today,
   categories,
+  focus,
 }: {
   id: number;
   graph: SeriesGraph;
   today: string;
   categories: Map<number, Category>;
+  /** 光らせるタスク（子タスクの詳細から来たとき） */
+  focus: number | null;
 }) {
   const dir: Dir = useWideScreen() ? 'right' : 'down';
   const g = GEOM[dir];
@@ -265,7 +272,15 @@ function GraphPanel({
   const scrolled = useRef(false);
   useEffect(() => {
     const el = scroller.current;
-    if (!el || dir !== 'right' || scrolled.current || layout.nodes.size === 0) return;
+    if (scrolled.current || (layout.nodes.size === 0 && layout.isolated.length === 0)) return;
+    // 子タスクの詳細から来たときは、そのタスクが真ん中に来るように送る（図の横とページの縦の両方）
+    const target = focus !== null ? document.querySelector(`[data-node="${focus}"]`) : null;
+    if (target) {
+      scrolled.current = true;
+      target.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
+      return;
+    }
+    if (!el || dir !== 'right' || layout.nodes.size === 0) return;
     scrolled.current = true;
     const open = [...layout.nodes].filter(([nid]) => {
       const st = all.get(nid)?.status;
@@ -274,7 +289,7 @@ function GraphPanel({
     if (open.length === 0) return;
     const first = Math.min(...open.map(([, p]) => p.layer));
     el.scrollLeft = Math.max(0, place({ layer: first, slot: 0 }, dir).x - GEOM.right.main - 80);
-  }, [layout, dir, all]);
+  }, [layout, dir, all, focus]);
 
   // つなぐ: ノードの ● を押したまま、後にやるタスクの上で離すと 先→後 の線ができる（指でもマウスでも）。
   // 画面の端に寄せている間は、図（横）とページ（縦）を送る
@@ -380,6 +395,7 @@ function GraphPanel({
       dir={dir}
       outside={!inside.has(t.id)}
       linking={link?.from === t.id ? 'from' : link?.over === t.id ? 'over' : null}
+      focused={t.id === focus}
       today={today}
       categories={categories}
       style={style}
@@ -588,6 +604,7 @@ function NodeCard({
   dir,
   outside,
   linking,
+  focused,
   today,
   categories,
   style,
@@ -599,6 +616,8 @@ function NodeCard({
   outside: boolean;
   /** つないでいる最中: from＝ここから引いている・over＝ここで離すとつながる */
   linking: 'from' | 'over' | null;
+  /** 子タスクの詳細から来たときの、そのタスク */
+  focused: boolean;
   today: string;
   categories: Map<number, Category>;
   style: React.CSSProperties;
@@ -618,9 +637,11 @@ function NodeCard({
         : 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-900';
   const ring = linking
     ? 'ring-2 ring-indigo-500 ring-offset-1 dark:ring-offset-zinc-950'
-    : t.status === 'doing'
-      ? 'ring-1 ring-indigo-400'
-      : null;
+    : focused
+      ? 'ring-[3px] ring-amber-400 ring-offset-2 dark:ring-offset-zinc-950'
+      : t.status === 'doing'
+        ? 'ring-1 ring-indigo-400'
+        : null;
   return (
     <div data-node={t.id} style={style} className="relative">
       <button
@@ -632,7 +653,7 @@ function NodeCard({
           tone,
           ring,
           outside && 'border-dashed',
-          (isDimmed(t) || canceled) && !linking && 'opacity-50',
+          (isDimmed(t) || canceled) && !linking && !focused && 'opacity-50',
           linking === 'over' && 'shadow-md',
         )}
       >
