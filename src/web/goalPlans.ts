@@ -2,16 +2,15 @@
 // 予定1件を「やる日が1日だけのタスク」の形に写して渡し、動かした結果（やる日の書き換え）を予定の書き換えに戻す。
 // 写したものの番号は負（−予定の番号）にして、タスクとぶつからないようにする。純粋関数だけを置く。
 
-import { fmtAmount } from '../shared/goals.ts';
 import type { GoalPlanPatchInput } from '../shared/schemas.ts';
-import type { Goal, GoalPlan, Task } from '../shared/types.ts';
+import type { GoalPlan, Task } from '../shared/types.ts';
 
 /** 時間割に渡す形（予定を写したものには goalPlan が付く） */
 export type GridTask = Task & { goalPlan?: GoalPlan };
 
-/** 予定の見出し: 🎯 回路の本 10ページ */
+/** 予定の見出し: 🎯 回路の本（量は入れない＝記録するときに決める） */
 export function planLabel(p: GoalPlan): string {
-  return `🎯 ${p.title}${p.amount !== null ? ` ${fmtAmount(p.amount, p.unit)}` : ''}`;
+  return `🎯 ${p.title}`;
 }
 
 /** 予定1件を、やる日が1日だけのタスクの形に写す（済んだ予定は完了として薄く・動かせない） */
@@ -54,12 +53,4 @@ export function planPatch(dates: Task['doDates']): GoalPlanPatchInput {
   const d = dates[0];
   if (!d) return {};
   return { date: d.date, start: d.start ?? null, minutes: d.minutes };
-}
-
-/** 置くときの量の既定: 「回」は 1、1日ごとは1日の目標の量、期限までは1日の目安、それ以外は決めない */
-export function planAmount(g: Goal): number | null {
-  if (g.unit === '回') return 1;
-  if (g.kind === 'rate' && g.period === 'day') return g.target;
-  if (g.kind === 'total') return g.progress.perDay;
-  return null;
 }

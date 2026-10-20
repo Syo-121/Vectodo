@@ -176,10 +176,10 @@ export function goalDetailText(g: GoalDetail, limit = 30): string {
   ].join('\n');
 }
 
-/** やる時間の1行: - #12 2026-10-21 21:00〜(30m) 10ページ（済） */
+/** やる時間の1行: - #12 2026-10-21 21:00〜(30m)（済） */
 export function goalPlanLine(p: GoalPlan): string {
   const when = p.start ? ` ${p.start}〜${p.minutes ? `(${minutes(p.minutes)})` : ''}` : '（時刻なし）';
-  return `- #${p.id} ${p.date}${when}${p.amount !== null ? ` ${fmtAmount(p.amount, p.unit)}` : ''}${p.done ? '（済）' : ''}`;
+  return `- #${p.id} ${p.date}${when}${p.done ? '（済）' : ''}`;
 }
 
 function goalPlansText(plans: GoalPlan[]): string[] {

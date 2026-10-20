@@ -165,7 +165,7 @@ export function GoalTodayRow({ g, plans = [] }: { g: Goal; plans?: GoalPlan[] })
         </div>
         {next.length > 0 && (
           <div className="mt-0.5 truncate text-xs text-emerald-700 dark:text-emerald-300">
-            🗓 {next.map((p) => `${p.start ?? '時刻なし'}${p.amount !== null ? ` ${fmtAmount(p.amount, p.unit)}` : ''}`).join('・')} にやる
+            🗓 {next.map((p) => p.start ?? '時刻なし').join('・')} にやる
           </div>
         )}
         <GoalBar g={g} className="mt-1.5 h-1.5" />
