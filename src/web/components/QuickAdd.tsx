@@ -1,5 +1,6 @@
 // 即追加（design 7-2・7-5）。「タスク／メモ／テンプレ」を切り替えられる。タスクとメモは、保存したあと開いたまま続けて入れるか、
 // 1件で閉じるかを設定で選ぶ（端末ごと・addAfter.ts。閉じるのは保存できたときだけ＝失敗したら書いたものが残る）。
+// 保存の返事が来たらすぐ欄を空ける・閉じる（画面の取り直しは待たない）。返事を待っている間は二度押ししても送らない。
 // タスク: Enter で保存。何も選ばなければ受信箱に入る。
 // メモ: Enter は改行、Ctrl＋Enter（⌘＋Enter）か「保存」で保存。受信箱に入り、あとで AI が記録やタスクへ振り分ける。
 // テンプレ: テンプレートを選び、基準日とタイトルを入れて親・子・依存をまとめて作る（design 4-8）。作ったらシートは閉じる。
@@ -73,13 +74,15 @@ function TaskForm({ categories, onClose }: { categories: Category[]; onClose: ()
   const openTask = useOpenTask();
   const [after] = useAddAfter();
   // つながらなければ端末に溜めて、つながったら送る（outbox.ts）
-  const create = useWrite((input: TaskCreateInput) => sendOrQueue({ kind: 'task', input }, () => api.create(input)));
+  const create = useWrite((input: TaskCreateInput) => sendOrQueue({ kind: 'task', input }, () => api.create(input)), [['tasks']], {
+    wait: false,
+  });
 
   useEffect(() => input.current?.focus(), []);
 
   const submit = () => {
     const t = title.trim();
-    if (!t) return;
+    if (!t || create.isPending) return;
     create.mutate(
       {
         title: t,
@@ -174,13 +177,13 @@ function MemoForm({ onClose }: { onClose: () => void }) {
   const [body, setBody] = useState('');
   const area = useRef<HTMLTextAreaElement>(null);
   const [after] = useAddAfter();
-  const create = useMemoWrite((b: string) => sendOrQueue({ kind: 'memo', body: b }, () => api.createMemo(b)));
+  const create = useMemoWrite((b: string) => sendOrQueue({ kind: 'memo', body: b }, () => api.createMemo(b)), { wait: false });
 
   useEffect(() => area.current?.focus(), []);
 
   const submit = () => {
     const b = body.trim();
-    if (!b) return;
+    if (!b || create.isPending) return;
     create.mutate(b, {
       onSuccess: (m) => {
         setBody('');
@@ -225,8 +228,10 @@ function TemplateForm({ onClose }: { onClose: () => void }) {
   /** null の間は、テンプレートと基準日から自動で入れる */
   const [title, setTitle] = useState<string | null>(null);
   const openTask = useOpenTask();
-  const apply = useWrite((a: { id: number; title: string; date: string | null }) =>
-    api.applyTemplate(a.id, { title: a.title, date: a.date }),
+  const apply = useWrite(
+    (a: { id: number; title: string; date: string | null }) => api.applyTemplate(a.id, { title: a.title, date: a.date }),
+    [['tasks']],
+    { wait: false },
   );
   const today = clientToday();
 
@@ -251,7 +256,7 @@ function TemplateForm({ onClose }: { onClose: () => void }) {
 
   const submit = () => {
     const t = shownTitle.trim();
-    if (!t) return;
+    if (!t || apply.isPending) return;
     apply.mutate(
       { id: tpl.id, title: t, date: anchor ? date : null },
       {
