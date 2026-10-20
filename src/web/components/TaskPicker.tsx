@@ -1,6 +1,7 @@
 // タスクを検索して1つ選ぶ（依存・親の指定で使う）。
 
 import { useEffect, useState } from 'react';
+import type { Task } from '../../shared/types.ts';
 import { useAllTasks } from '../api.ts';
 
 export function TaskPicker({
@@ -11,7 +12,8 @@ export function TaskPicker({
 }: {
   exclude: Set<number>;
   placeholder: string;
-  onPick: (id: number) => void;
+  /** 選んだタスク自体も渡す（まだ無いタスクの入力欄で、選んだものの名前を出すため） */
+  onPick: (id: number, task: Task) => void;
   onCancel: () => void;
 }) {
   const [q, setQ] = useState('');
@@ -38,7 +40,7 @@ export function TaskPicker({
           <li key={t.id}>
             <button
               type="button"
-              onClick={() => onPick(t.id)}
+              onClick={() => onPick(t.id, t)}
               className="w-full rounded px-2 py-1.5 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
             >
               <span className="mr-2 text-xs text-zinc-400">{t.code}</span>

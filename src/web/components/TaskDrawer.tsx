@@ -40,7 +40,7 @@ export function TaskPane() {
       <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center text-sm text-zinc-400">
         <span className="text-3xl">☜</span>
         タスクを選ぶと、ここに詳細が出る。
-        <span className="text-xs">n でタスク・m でメモを追加 ／ Esc で閉じる</span>
+        <span className="text-xs">n でタスク・Shift＋n で詳しく・m でメモを追加 ／ Esc で閉じる</span>
       </div>
     );
   }

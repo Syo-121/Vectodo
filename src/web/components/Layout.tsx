@@ -45,9 +45,10 @@ export function Layout() {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement;
       if (el.closest('input, textarea, select, [contenteditable]')) return;
-      if ((e.key === 'n' || e.key === 'm') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      // n＝タスク・N（Shift＋n）＝詳しく・m＝メモ
+      if ((e.key === 'n' || e.key === 'N' || e.key === 'm') && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
-        setMode(e.key === 'm' ? 'memo' : 'task');
+        setMode(e.key === 'm' ? 'memo' : e.key === 'N' ? 'full' : 'task');
         setAdding(true);
       }
     };
@@ -84,7 +85,7 @@ export function Layout() {
             type="button"
             onClick={() => setAdding(true)}
             className="ml-auto hidden rounded-md bg-indigo-600 px-3 py-1 text-sm text-white md:block"
-            title="n キーでタスク、m キーでメモ"
+            title="n キーでタスク、Shift＋n で詳しく、m キーでメモ"
           >
             ＋ 追加
           </button>
