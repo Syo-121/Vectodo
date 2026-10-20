@@ -165,7 +165,8 @@ export const useMemos = (status: 'open' | 'done' | 'all' = 'open') =>
 export const useNotes = (archived = false) => useQuery({ queryKey: ['notes', archived], queryFn: () => api.notes(archived) });
 export const useNoteLabels = () => useQuery({ queryKey: ['notes', 'labels'], queryFn: api.noteLabels });
 /** メモの書き込み（タスク化でタスク側も変わるので両方取り直す） */
-export const useMemoWrite = <A, R>(fn: (a: A) => Promise<R>) => useWrite(fn, [['memos'], ['tasks']]);
+export const useMemoWrite = <A, R>(fn: (a: A) => Promise<R>, opts?: WriteOptions) =>
+  useWrite(fn, [['memos'], ['tasks']], opts);
 
 export const useToday = () => useQuery({ queryKey: ['tasks', 'today'], queryFn: api.today });
 export const useInbox = () => useQuery({ queryKey: ['tasks', 'inbox'], queryFn: api.inbox });
@@ -192,13 +193,21 @@ export const useOverlay = (from: string, to: string, enabled: boolean) =>
 export const useCategories = (includeArchived = false) =>
   useQuery({ queryKey: ['categories', includeArchived], queryFn: () => api.categories(includeArchived) });
 
+/** wait: 取り直しが終わるまで書き込みを「途中」のままにするか（既定は待つ）。
+ *  待つと、時間割で落としたカードを新しい中身が来るまでその位置に見せておける。
+ *  即追加のように保存の返事だけ見ればよいものは false（待つとスマホでは数秒、欄が残ったまま閉じない） */
+export type WriteOptions = { wait?: boolean };
+
 /** 書き込み用。終わったら（失敗でも）取り直し、失敗したらトーストで知らせる */
-export function useWrite<A, R>(fn: (a: A) => Promise<R>, keys: string[][] = [['tasks']]) {
+export function useWrite<A, R>(fn: (a: A) => Promise<R>, keys: string[][] = [['tasks']], { wait = true }: WriteOptions = {}) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,
     // 失敗したときも取り直す（先に動かして見せた画面を元に戻すため）
-    onSettled: () => Promise.all(keys.map((k) => qc.invalidateQueries({ queryKey: k }))),
+    onSettled: () => {
+      const refetch = Promise.all(keys.map((k) => qc.invalidateQueries({ queryKey: k })));
+      return wait ? refetch : undefined;
+    },
     onError: (e) => toast(e instanceof Error ? e.message : String(e), 'error'),
   });
 }
