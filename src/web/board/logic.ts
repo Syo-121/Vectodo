@@ -4,6 +4,7 @@ import type { TaskPatchInput } from '../../shared/schemas.ts';
 import type { Category, OverlayEvent, Task } from '../../shared/types.ts';
 import { addDays, daysInMonth, diffDays, isoWeekday } from '../../shared/dates.ts';
 import { isOpen } from '../../shared/constants.ts';
+import { isFinishedSeries, nextSteps } from '../../shared/series.ts';
 
 export type Axis = 'status' | 'urgency' | 'priority' | 'category';
 
@@ -256,6 +257,54 @@ export function reviewDays(tasks: Task[], since: string): { date: string; tasks:
   return [...groups.entries()]
     .sort(([a], [b]) => b.localeCompare(a))
     .map(([date, list]) => ({ date, tasks: list.sort((a, b) => finishedAt(b).localeCompare(finishedAt(a))) }));
+}
+
+// ───────────── プロジェクト（2026-10-20・design 7-14）
+
+export interface ProjectNode {
+  task: Task;
+  /** いま着手できる子（子もまた親ならその下へ・design 4-3） */
+  next: Task[];
+  /** 直下の未完了のうち、待ち・依存待ちのもの（親でないもの）の数 */
+  waiting: number;
+  /** 子が全部終わった（閉じるかを聞く） */
+  finished: boolean;
+  /** 自分か、未完了の子孫のうちいちばん早い締切（並べる順に使う） */
+  nextDue: string | null;
+  /** 中間の親（子を持つ子）。並び順 */
+  subs: ProjectNode[];
+}
+
+/**
+ * 子を持つ未完了の親（プロジェクト・シリーズ）を、いちばん上の親ごとの木にする。
+ * いちばん上は、自分の締切（無ければ子孫の締切）の近い順・締切の無いものは後ろ（本人決定）。
+ */
+export function projectTree(tasks: Task[]): ProjectNode[] {
+  const open = tasks.filter((t) => isOpen(t.status));
+  const byId = new Map(open.map((t) => [t.id, t]));
+  const kids = new Map<number, Task[]>();
+  for (const t of open) if (t.parentId !== null) kids.set(t.parentId, [...(kids.get(t.parentId) ?? []), t]);
+  const steps = nextSteps(open);
+  const isParent = (t: Task) => t.children.total > 0;
+  const build = (t: Task, depth: number): ProjectNode => {
+    const children = [...(kids.get(t.id) ?? [])].sort((a, b) => a.position - b.position || a.id - b.id);
+    const subs = depth < 10 ? children.filter(isParent).map((c) => build(c, depth + 1)) : [];
+    const dues = [t.dueDate, ...children.map((c) => c.dueDate), ...subs.map((s) => s.nextDue)]
+      .filter((d): d is string => d !== null)
+      .sort();
+    return {
+      task: t,
+      next: steps.get(t.id) ?? [],
+      waiting: children.filter((c) => !isParent(c) && (c.blocked || c.status === 'waiting')).length,
+      finished: isFinishedSeries(t),
+      nextDue: dues[0] ?? null,
+      subs,
+    };
+  };
+  return open
+    .filter((t) => isParent(t) && (t.parentId === null || !byId.has(t.parentId)))
+    .map((t) => build(t, 0))
+    .sort((a, b) => (a.nextDue ?? '9999-99-99').localeCompare(b.nextDue ?? '9999-99-99') || a.task.id - b.task.id);
 }
 
 // ───────────── 月（v3・design 7-11）

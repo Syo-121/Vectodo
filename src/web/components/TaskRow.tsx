@@ -214,6 +214,23 @@ export function TaskRow({ task: t, today, categories, depth = 0, toggle, actions
   );
 }
 
+/** 子が全部終わった親を閉じる（今日の「子が全部終わった」・ボードの「プロジェクト」。親のかかった時間は聞かない・design 4-3） */
+export function CloseButton({ task: t }: { task: Task }) {
+  const close = useWrite(() => api.update(t.id, { status: 'done' }));
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        close.mutate(undefined, { onSuccess: () => toast(`${t.code} を閉じた`) });
+      }}
+      className="rounded-md border border-emerald-500 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+    >
+      閉じる
+    </button>
+  );
+}
+
 /** ボード用のカード（カンバン・週） */
 export function TaskCard({
   task: t,
