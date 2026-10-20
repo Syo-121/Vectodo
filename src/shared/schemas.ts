@@ -176,5 +176,26 @@ export const zGoalLogCreate = z.object({
   /** 省くと 1 */
   amount: zAmount.optional(),
   note: z.string().trim().max(500).optional(),
+  /** やる時間（goal_plans）から記録したとき、その予定と結ぶ。省くと、その日のまだ済んでいない予定のうち最初のものと結ぶ */
+  planId: z.number().int().positive().optional(),
 });
 export type GoalLogInput = z.infer<typeof zGoalLogCreate>;
+
+// 目標をやる時間（design 3-6f・4-14）
+const goalPlanFields = {
+  date: zDate,
+  /** その日の時刻（null＝時刻なし） */
+  start: zTime.nullable(),
+  minutes: z.number().int().positive().max(24 * 60).nullable(),
+  /** この時間にやる量（null＝決めていない） */
+  amount: zAmount.nullable(),
+};
+export const zGoalPlanCreate = z.object({
+  date: goalPlanFields.date,
+  start: goalPlanFields.start.optional(),
+  minutes: goalPlanFields.minutes.optional(),
+  amount: goalPlanFields.amount.optional(),
+});
+export type GoalPlanCreateInput = z.infer<typeof zGoalPlanCreate>;
+export const zGoalPlanPatch = z.object(goalPlanFields).partial();
+export type GoalPlanPatchInput = z.infer<typeof zGoalPlanPatch>;

@@ -2,13 +2,13 @@
 // 書き込みのたびに少し待ってから走り、10分ごとにも全体を見直す（通信に失敗しても次で追いつく）。
 
 import { addDays, type Clock } from '../../shared/dates.ts';
-import type { OverlayEvent } from '../../shared/types.ts';
+import type { GoalPlan, OverlayEvent } from '../../shared/types.ts';
 import type { CategoryService } from '../categories.ts';
 import type { DB } from '../db.ts';
 import type { SettingsService } from '../settings.ts';
 import type { TaskService } from '../tasks.ts';
 import { GoogleError, type CalendarApi, type CalendarInfo, type EventBody, type RawEvent } from './google.ts';
-import { desiredFor, diff, keyOf, sentOf, type Action, type Desired, type SyncedRow } from './plan.ts';
+import { desiredFor, desiredForGoalPlan, diff, keyOf, sentOf, type Action, type Desired, type SyncedRow } from './plan.ts';
 
 /** 同期が使う Google 側の操作（本物は GoogleClient・テストは偽物） */
 export interface GcalApi extends CalendarApi {
@@ -49,6 +49,8 @@ interface Options {
   debounceMs?: number;
   /** 予定1件ごとの間隔（Google の流量制限よけ） */
   pauseMs?: number;
+  /** 目標をやる時間（design 4-14）。済んだものも含めて返す（アーカイブした目標のものは返さない＝先の予定は消える）。無ければ書き出さない */
+  goalPlans?: () => GoalPlan[];
 }
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -232,7 +234,10 @@ export class GcalSync {
       appUrl: this.opts.appUrl,
       timezone: this.opts.timezone,
     };
-    const desired = this.tasks.all({ includeDone: true, includeArchived: true }).flatMap((t) => desiredFor(t, ctx));
+    const desired = [
+      ...this.tasks.all({ includeDone: true, includeArchived: true }).flatMap((t) => desiredFor(t, ctx)),
+      ...(this.opts.goalPlans?.() ?? []).map((p) => desiredForGoalPlan(p, ctx)),
+    ];
     const actions = diff(desired, this.rows(), today);
     const result: SyncResult = { created: 0, updated: 0, deleted: 0, errors: [] };
     for (const a of actions) {
@@ -388,5 +393,6 @@ function toBody(d: Desired): EventBody {
 
 function label(a: Action): string {
   const r = a.type === 'create' ? a.want : a.type === 'update' ? a.want : a.row;
-  return `T-${String(r.taskId).padStart(3, '0')} ${r.slot}`;
+  // 目標をやる時間は taskId 0・slot goal:<id>
+  return r.taskId === 0 ? `目標の${r.slot}` : `T-${String(r.taskId).padStart(3, '0')} ${r.slot}`;
 }

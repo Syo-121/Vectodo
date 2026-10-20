@@ -4,8 +4,9 @@
 import { PRIORITY_LABEL } from '../../shared/constants.ts';
 import { addDays, isoWeekday } from '../../shared/dates.ts';
 import { PLACE_DEFAULT_MIN } from '../../shared/flow.ts';
+import { fmtAmount } from '../../shared/goals.ts';
 import { formatTaskCode } from '../../shared/ids.ts';
-import type { Category, Task } from '../../shared/types.ts';
+import type { Category, GoalPlan, Task } from '../../shared/types.ts';
 
 type When = { date: string } | { dateTime: string; timeZone: string };
 
@@ -163,6 +164,39 @@ export function desiredFor(t: Task, ctx: PlanContext): Desired[] {
     });
   }
   return out;
+}
+
+/** 目標をやる時間の予定の slot（taskId は 0・design 4-14） */
+export const goalPlanSlot = (planId: number) => `goal:${planId}`;
+
+/**
+ * 目標をやる時間（design 4-14）のあるべき予定。書き込み先は既定のカレンダー、色は緑（10）。
+ * 時刻があればその時刻から長さ（無ければ 30m）の予定で5分前に通知、無ければ終日。記録と結ばれたら【済】にして通知を外す
+ */
+export function desiredForGoalPlan(p: GoalPlan, ctx: PlanContext): Desired {
+  const slot = goalPlanSlot(p.id);
+  const amount = p.amount !== null ? ` ${fmtAmount(p.amount, p.unit)}` : '';
+  const lines = [`目標: ${p.goalCode} ${p.rule}（Vectodo で管理）`];
+  if (ctx.appUrl) lines.push(`${ctx.appUrl}/goals/${p.goalId}`);
+  const base = {
+    calendarId: ctx.defaultCalendarId,
+    summary: `${p.done ? '【済】' : ''}【目標】${p.title}${amount}`,
+    description: lines.join('\n'),
+    colorId: '10',
+  };
+  let spec: EventSpec;
+  if (p.start) {
+    const from = toMin(p.start);
+    const to = from + (p.minutes ?? PLACE_DEFAULT_MIN);
+    const at = (m: number) => ({
+      dateTime: `${m >= 1440 ? addDays(p.date, 1) : p.date}T${hhmm(m % 1440)}:00+09:00`,
+      timeZone: ctx.timezone,
+    });
+    spec = { ...base, start: at(from), end: at(to), reminders: p.done ? [] : BLOCK_REMINDERS };
+  } else {
+    spec = { ...base, start: { date: p.date }, end: { date: addDays(p.date, 1) }, reminders: p.done ? [] : ALL_DAY_REMINDERS };
+  }
+  return { key: keyOf(0, slot), taskId: 0, slot, date: p.date, closed: p.done, spec };
 }
 
 /**
