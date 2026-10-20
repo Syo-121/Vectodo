@@ -65,13 +65,18 @@ self.addEventListener('fetch', (e) => {
 async function networkOrSaved(req) {
   const net = fetch(req).then(async (res) => {
     if (res.ok && res.type === 'basic') {
-      const headers = new Headers(res.headers);
-      headers.set('x-vectodo-saved', new Date().toISOString());
-      const saved = new Response(await res.clone().blob(), { status: res.status, statusText: res.statusText, headers });
-      const c = await caches.open(DATA);
-      await c.put(req, saved);
-      const keys = await c.keys();
-      await Promise.all(keys.slice(0, Math.max(0, keys.length - KEEP)).map((k) => c.delete(k)));
+      // 残せなくても（容量・ブラウザの都合）読み取り自体は返す。残すのはつながらないときのためのおまけ
+      try {
+        const headers = new Headers(res.headers);
+        headers.set('x-vectodo-saved', new Date().toISOString());
+        const saved = new Response(await res.clone().blob(), { status: res.status, statusText: res.statusText, headers });
+        const c = await caches.open(DATA);
+        await c.put(req, saved);
+        const keys = await c.keys();
+        await Promise.all(keys.slice(0, Math.max(0, keys.length - KEEP)).map((k) => c.delete(k)));
+      } catch {
+        // 残せなかった
+      }
     }
     return res;
   });
