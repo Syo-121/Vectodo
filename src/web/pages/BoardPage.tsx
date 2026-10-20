@@ -16,6 +16,7 @@ import { WeekView } from '../board/WeekView.tsx';
 import { FarNotice } from '../components/FarNotice.tsx';
 import { FilterBar } from '../components/FilterBar.tsx';
 import { applyFilter, EMPTY_FILTER, normalizeFilter, type TaskFilter } from '../filter.ts';
+import { forAction, forCalendar } from '../../shared/series.ts';
 import { hiddenFromPlan, splitFar } from '../horizon.ts';
 import { useLocalState } from '../storage.ts';
 import { addDays, clientToday, cx, isOpenTask } from '../util.ts';
@@ -65,7 +66,9 @@ export function BoardPage() {
   };
   const [savedFilter, setFilter] = useLocalState<TaskFilter>('board.filter', EMPTY_FILTER);
   const filter = normalizeFilter(savedFilter);
-  const [withChildren, setWithChildren] = useLocalState('board.children', true);
+  // シリーズ（子が残っている親）も出すか（design 4-3）。既定は出さない＝並べるビューには子（やること）だけを並べて、
+  // 親の締切はいま着手できる子に受け継がせる。日・週・月では親は締切の印だけ（やる日は出さない）
+  const [withParents, setWithParents] = useLocalState('board.parents', false);
   // 依存待ち（先にやるものが終わっていない未完了）を出すか。ボトルネックは待っている側を数えるので、そこでは常に含める
   const [withBlocked, setWithBlocked] = useLocalState('board.blocked', true);
   // 週・月に Google カレンダーの予定を重ねる（v3・design 7-11）。つながっているときだけ選べる
@@ -82,14 +85,26 @@ export function BoardPage() {
   const categories = new Map(cats.map((c) => [c.id, c]));
   const qc = useQueryClient();
 
-  const scoped = all.filter((t) => withChildren || t.parentId === null);
-  const withAllBlocked = applyFilter(scoped, filter, today);
-  const tasks = withBlocked ? withAllBlocked : withAllBlocked.filter((t) => !(isOpenTask(t) && t.blocked));
+  const narrow = (list: Task[]) => {
+    const withAllBlocked = applyFilter(list, filter, today);
+    return {
+      withAllBlocked,
+      shown: withBlocked ? withAllBlocked : withAllBlocked.filter((t) => !(isOpenTask(t) && t.blocked)),
+    };
+  };
+  // 親の扱いはビューの種類で変える（design 4-3）: 並べるビュー＝親を外して締切を子へ／日付のビュー＝親は締切の印だけ／
+  // ボトルネック・振り返り＝そのまま（依存のつながりと、終わったものを見るため）
+  const actionBase = withParents ? all : forAction(all);
+  const action = narrow(actionBase);
+  const dated = narrow(withParents ? all : forCalendar(all));
+  const raw = narrow(all);
+  const dateView = view === 'day' || view === 'week' || view === 'month';
+  const tasks = dateView ? dated.shown : raw.shown;
   // 並べるだけのビュー（カンバン・重要×緊急・計画待ち）は、カテゴリの日数より先の分を隠す（design 4-9）。
   // 週・月は日付の画面なので全部出す
   const [showFar, setShowFar] = useLocalState('board.showFar', false);
-  const { near, far } = splitFar(tasks, categories, today);
-  const listed = showFar ? tasks : near;
+  const { near, far } = splitFar(action.shown, categories, today);
+  const listed = showFar ? action.shown : near;
   const planned = listed.filter((t) => !hiddenFromPlan(t, categories));
   const horizonView = view === 'kanban' || view === 'matrix' || view === 'plan';
   const activeCats = cats.filter((c) => !c.archived);
@@ -119,7 +134,7 @@ export function BoardPage() {
 
   const badge: Partial<Record<View, number>> = {
     plan: planQueue(planned).length,
-    bottleneck: bottlenecks(withAllBlocked).length,
+    bottleneck: bottlenecks(raw.withAllBlocked).length,
   };
   const pill = (active: boolean) =>
     cx(
@@ -159,10 +174,12 @@ export function BoardPage() {
                 ))}
               </div>
             )}
-            <label className="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-300">
-              <input type="checkbox" checked={withChildren} onChange={(e) => setWithChildren(e.target.checked)} />
-              子タスクを含める
-            </label>
+            {(horizonView || dateView) && (
+              <label className="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-300">
+                <input type="checkbox" checked={withParents} onChange={(e) => setWithParents(e.target.checked)} />
+                シリーズ（親）も出す
+              </label>
+            )}
             {view !== 'bottleneck' && (
               <label className="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-300">
                 <input type="checkbox" checked={withBlocked} onChange={(e) => setWithBlocked(e.target.checked)} />
@@ -182,8 +199,8 @@ export function BoardPage() {
               onChange={setFilter}
               categories={activeCats}
               statuses={STATUSES}
-              shown={(view === 'bottleneck' ? withAllBlocked : view === 'plan' ? planned : horizonView ? listed : tasks).length}
-              total={scoped.length}
+              shown={(view === 'bottleneck' ? raw.withAllBlocked : view === 'plan' ? planned : horizonView ? listed : tasks).length}
+              total={(horizonView ? actionBase : all).length}
             />
             {horizonView && (
               <div className="mt-2.5">
@@ -208,9 +225,9 @@ export function BoardPage() {
           onPatch={onPatch}
         />
       ) : view === 'day' ? (
-        <DayView {...common} pool={all} capacityMin={settings?.dailyCapacityMin ?? 360} onSetDates={onSetDates} overlay={overlay} />
+        <DayView {...common} pool={actionBase} capacityMin={settings?.dailyCapacityMin ?? 360} onSetDates={onSetDates} overlay={overlay} />
       ) : view === 'week' ? (
-        <WeekView {...common} pool={all} capacityMin={settings?.dailyCapacityMin ?? 360} onSetDates={onSetDates} overlay={overlay} />
+        <WeekView {...common} pool={actionBase} capacityMin={settings?.dailyCapacityMin ?? 360} onSetDates={onSetDates} overlay={overlay} />
       ) : view === 'month' ? (
         <MonthView {...common} onMoveDate={onMoveDate} overlay={overlay} />
       ) : view === 'series' ? (
@@ -220,7 +237,7 @@ export function BoardPage() {
       ) : view === 'plan' ? (
         <PlanView {...common} tasks={planned} />
       ) : view === 'bottleneck' ? (
-        <BottleneckView {...common} tasks={withAllBlocked} />
+        <BottleneckView {...common} tasks={raw.withAllBlocked} />
       ) : (
         <ReviewView {...common} since={since} />
       )}

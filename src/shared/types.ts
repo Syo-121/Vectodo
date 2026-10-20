@@ -49,6 +49,8 @@ export interface Task {
   blocked: boolean;
   /** 子の進み具合（中止は数えない） */
   children: { total: number; done: number };
+  /** 締切が親から受け継いだものなら、その親（行動の画面で計算する印・API は返さない・design 4-3） */
+  dueFrom?: { id: number; title: string };
 }
 
 export interface TaskDetail extends Task {
@@ -76,6 +78,12 @@ export interface TodayView {
   deadlines: Task[];
   /** 今日のやる日に時刻がある未完了（今日の流れの空きに置いたもの）。時刻順 */
   placed: Task[];
+  /** 子が全部終わって、締切かやる日がある親（「閉じる？」と聞く・design 4-3） */
+  closable: Task[];
+  /** 子が残っている親のうち、締切が7日以内（過ぎたものも）のもの。MCP の今日で「シリーズの締切」として出す */
+  seriesDue: Task[];
+  /** seriesDue の親ごとの「いま着手できる子」の番号（親の番号 → T-NNN） */
+  steps: Record<number, string[]>;
 }
 
 /** 「次にやること」の段（design 4-10）。上ほど先 */

@@ -72,7 +72,9 @@ export function TodayPage() {
   // 今日の分の進み具合（済んだものと合わせて）
   const left = share.length;
   const done = v.doneToday.length;
-  const empty = v.ranked.length === 0 && v.waiting.length === 0;
+  // 子が全部終わった親（design 4-3）。つながっていないとき、前の版で保存した返事には無いので空として扱う
+  const closable = v.closable ?? [];
+  const empty = v.ranked.length === 0 && v.waiting.length === 0 && closable.length === 0;
 
   return (
     <div>
@@ -136,6 +138,25 @@ export function TodayPage() {
           <div className={CARD}>
             {todayRest.map((n) => (
               <NextRow key={n.task.id} n={n} today={today} now={clock} categories={categories} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {closable.length > 0 && (
+        <section className="mt-6">
+          <h2 className={H2}>子が全部終わった（{closable.length}）</h2>
+          <div className={CARD}>
+            {closable.map((t) => (
+              <TaskRow
+                key={t.id}
+                task={t}
+                today={today}
+                categories={categories}
+                showParent
+                note={<div className="mt-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">シリーズの工程が全部済んだ。閉じていい？</div>}
+                actions={<CloseButton task={t} />}
+              />
             ))}
           </div>
         </section>
@@ -257,6 +278,20 @@ function PlanButtons({ task: t, today, planned }: { task: Task; today: string; p
         明日
       </button>
     </>
+  );
+}
+
+/** 子が全部終わった親を閉じる（親のかかった時間は聞かない・design 4-3） */
+function CloseButton({ task: t }: { task: Task }) {
+  const close = useWrite(() => api.update(t.id, { status: 'done' }));
+  return (
+    <button
+      type="button"
+      className="rounded-md border border-emerald-500 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+      onClick={() => close.mutate(undefined, { onSuccess: () => toast(`${t.code} を閉じた`) })}
+    >
+      閉じる
+    </button>
   );
 }
 

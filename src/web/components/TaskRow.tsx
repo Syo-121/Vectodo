@@ -122,9 +122,11 @@ export function TaskMeta({
             isOpenTask(t) && t.dueDate < today && 'font-medium text-red-600 dark:text-red-400',
             isOpenTask(t) && t.dueDate === today && 'font-medium text-orange-600 dark:text-orange-400',
           )}
+          title={t.dueFrom ? `シリーズ「${t.dueFrom.title}」の締切` : undefined}
         >
           ⏰ {fmtDate(t.dueDate, today)}
           {t.dueTime && ` ${t.dueTime}`}
+          {t.dueFrom && '（親）'}
         </span>
       )}
       {!hideDoDates && shownDates.length > 0 && (
