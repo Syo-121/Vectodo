@@ -2,11 +2,13 @@
 // - 時間割: Google カレンダーの1日表示のような縦の時間軸。ドラッグで時間を選んでタスクを置く（components/TimeGrid.tsx・ボードの日・週と同じ）
 // - 並び: 上に1日の帯、その下に、いま以降を時刻順に1本で。空きの［＋ 置く］・予定の［＋］（ながら）から置く
 // 置くと今日のやる日に時刻が入り、Google に時刻つきの予定として書き出される。
+// 目標をやる時間（design 4-14）は placed に混ぜて渡される（goalPlans.ts の planTask）。緑で描き、押すと記録のシート。
 
 import { useEffect, useState } from 'react';
 import { fmtClock, toMin, type DayFlow, type FlowItem } from '../../shared/flow.ts';
-import type { NextItem, OverlayEvent, Task } from '../../shared/types.ts';
-import { api, useWrite } from '../api.ts';
+import type { GoalPlan, NextItem, OverlayEvent, Task } from '../../shared/types.ts';
+import { api, useGoalWrite, useWrite } from '../api.ts';
+import { planOf, planPatch } from '../goalPlans.ts';
 import { type Slot } from '../grid.ts';
 import { useWideScreen } from '../media.ts';
 import { useOpenTask, useOpenTaskId } from '../nav.ts';
@@ -14,6 +16,7 @@ import { useClaimSidePanel } from '../sidePanel.ts';
 import { useLocalState } from '../storage.ts';
 import { toast } from '../toast.ts';
 import { CARD, cx, fmtSpan, TZ } from '../util.ts';
+import { PlanSheet } from './GoalSheets.tsx';
 import { PlacePanel, usePlacing } from './PlacePanel.tsx';
 import { TimeGrid } from './TimeGrid.tsx';
 
@@ -76,8 +79,14 @@ export function FlowSection({
   useEffect(() => {
     if (openId !== null) close();
   }, [openId, close]);
-  // 時間割で動かしたとき
+  // 時間割で動かしたとき（目標をやる時間なら予定の書き換え）
   const write = useWrite((a: { id: number; dates: Task['doDates'] }) => api.setDates(a.id, a.dates));
+  const movePlan = useGoalWrite((a: { id: number; dates: Task['doDates'] }) => api.updateGoalPlan(a.id, planPatch(a.dates)));
+  const setDates = (t: Task, dates: Task['doDates']) => {
+    const plan = planOf(t);
+    return (plan ? movePlan.mutateAsync({ id: plan.id, dates }) : write.mutateAsync({ id: t.id, dates })).catch(() => undefined);
+  };
+  const [openPlan, setOpenPlan] = useState<GoalPlan | null>(null);
   const gridTasks = [...placed, ...deadlines.filter((t) => !placed.some((p) => p.id === t.id))];
   // いまに当たる行が無ければ「いま」の行を差し込む（予定や置いたタスクの最中・いまから始まる空きがあれば要らない）
   const covered = flow.items.some((x) => ((x.kind === 'event' || x.kind === 'plan') && x.now) || (x.kind === 'free' && x.start === now));
@@ -138,14 +147,15 @@ export function FlowSection({
             dayStart={dayStart}
             dayEnd={dayEnd}
             onPlace={placing.open}
-            onSetDates={(t, dates) => write.mutateAsync({ id: t.id, dates }).catch(() => undefined)}
+            onSetDates={setDates}
+            onOpenPlan={setOpenPlan}
             pending={placing.pending}
             focus={placing.focus}
           />
         )}
         {open && mode === 'grid' && (
           <p className="mt-1.5 text-[11px] leading-relaxed text-zinc-400">
-            ドラッグで時間を選んでタスクを置く（スマホは長押ししてから・予定の上でもよい＝ながら）。タップならその時刻から。置いたタスクはドラッグで動かし、下の端で長さを変える。Google に時刻つきで入る。
+            ドラッグで時間を選んでタスクや目標を置く（スマホは長押ししてから・予定の上でもよい＝ながら）。タップならその時刻から。置いたものはドラッグで動かし、下の端で長さを変える。Google に時刻つきで入る。緑の枠は目標をやる時間（押すと記録できる）。
           </p>
         )}
         {open && mode === 'list' && (
@@ -153,7 +163,7 @@ export function FlowSection({
             {/* 1本の軸 */}
             <div className="absolute top-3 bottom-3 left-[calc(5.5rem+0.5rem+5px)] w-px bg-zinc-200 dark:bg-zinc-700" />
             {rows.map((x, i) => (
-              <FlowRow key={i} x={x} now={now} today={today} onPlace={openSlot} />
+              <FlowRow key={i} x={x} now={now} today={today} onPlace={openSlot} onOpenPlan={setOpenPlan} />
             ))}
           </ol>
         )}
@@ -175,6 +185,7 @@ export function FlowSection({
           onClose={close}
         />
       )}
+      {openPlan && <PlanSheet plan={openPlan} onClose={() => setOpenPlan(null)} />}
     </section>
   );
 }
@@ -187,11 +198,13 @@ function FlowRow({
   now,
   today,
   onPlace,
+  onOpenPlan,
 }: {
   x: FlowItem | { kind: 'now' };
   now: number;
   today: string;
   onPlace: (slot: Omit<Slot, 'date'>) => void;
+  onOpenPlan: (plan: GoalPlan) => void;
 }) {
   const openTask = useOpenTask();
   if (x.kind === 'now')
@@ -246,7 +259,7 @@ function FlowRow({
         </button>
       </li>
     );
-  if (x.kind === 'plan') return <PlanRow x={x} today={today} />;
+  if (x.kind === 'plan') return <PlanRow x={x} today={today} onOpenPlan={onOpenPlan} />;
   return (
     <li className={cx('flex items-center gap-2 py-1', x.now && '-mx-2 rounded-md bg-indigo-50 px-2 dark:bg-indigo-950/50')}>
       <span className={TIME}>
@@ -280,48 +293,65 @@ function FlowRow({
   );
 }
 
-/** 置いたタスク: 押すと詳細、「外す」で時刻だけ消す（今日のやる日は残る） */
-function PlanRow({ x, today }: { x: Extract<FlowItem, { kind: 'plan' }>; today: string }) {
+/**
+ * 置いたタスク: 押すと詳細、「外す」で時刻だけ消す（今日のやる日は残る）。
+ * 目標をやる時間（緑）: 押すと記録のシート、「外す」で予定ごと外す
+ */
+function PlanRow({ x, today, onOpenPlan }: { x: Extract<FlowItem, { kind: 'plan' }>; today: string; onOpenPlan: (plan: GoalPlan) => void }) {
   const openTask = useOpenTask();
+  const goal = planOf(x.task);
   const unplace = useWrite(() =>
     api.setDates(
       x.task.id,
       x.task.doDates.map((d) => (d.date === today ? { ...d, start: null } : d)),
     ),
   );
+  const removePlan = useGoalWrite((id: number) => api.deleteGoalPlan(id));
+  const tone = goal ? 'text-emerald-700 dark:text-emerald-300' : 'text-indigo-700 dark:text-indigo-300';
   return (
     <li
       className={cx(
         'flex items-center gap-2 py-1',
-        x.now && '-mx-2 rounded-md bg-indigo-50 px-2 dark:bg-indigo-950/50',
+        x.now && (goal ? '-mx-2 rounded-md bg-emerald-50 px-2 dark:bg-emerald-950/50' : '-mx-2 rounded-md bg-indigo-50 px-2 dark:bg-indigo-950/50'),
       )}
     >
-      <button type="button" onClick={() => openTask(x.task.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
-        <span className={cx(TIME, 'text-indigo-600 dark:text-indigo-400')}>
+      <button
+        type="button"
+        onClick={() => (goal ? onOpenPlan(goal) : openTask(x.task.id))}
+        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+      >
+        <span className={cx(TIME, goal ? 'text-emerald-600 dark:text-emerald-400' : 'text-indigo-600 dark:text-indigo-400')}>
           {fmtClock(x.start)}–{fmtClock(x.end)}
         </span>
         <span className={MARK}>
           <span
             className={cx(
               'rounded-sm ring-2 ring-white dark:ring-zinc-900',
-              x.over ? 'size-2 border-2 border-indigo-500 bg-white dark:bg-zinc-900' : 'size-2.5 bg-indigo-500',
+              x.over
+                ? cx('size-2 border-2 bg-white dark:bg-zinc-900', goal ? 'border-emerald-500' : 'border-indigo-500')
+                : cx('size-2.5', goal ? 'bg-emerald-500' : 'bg-indigo-500'),
             )}
           />
         </span>
         <span
           className={cx(
-            'min-w-0 truncate text-sm font-medium text-indigo-700 dark:text-indigo-300',
+            'min-w-0 truncate text-sm font-medium',
+            tone,
             x.over && 'border-l-2 border-indigo-200 pl-2 dark:border-indigo-800',
           )}
         >
-          {x.over && <span className="mr-1.5 text-[11px] font-normal text-indigo-500 dark:text-indigo-400">ながら</span>}
+          {x.over && <span className="mr-1.5 text-[11px] font-normal opacity-80">ながら</span>}
           {x.now && <span className="mr-1.5 text-xs">いま</span>}
           {x.task.title}
         </span>
       </button>
       <button
         type="button"
-        onClick={() => unplace.mutate(undefined, { onSuccess: () => toast(`${x.task.code} の時刻を外した（今日やるのは残る）`) })}
+        onClick={() =>
+          goal
+            ? removePlan.mutate(goal.id, { onSuccess: () => toast(`${goal.title} のやる時間を外した`) })
+            : unplace.mutate(undefined, { onSuccess: () => toast(`${x.task.code} の時刻を外した（今日やるのは残る）`) })
+        }
         className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-zinc-400 hover:text-zinc-600"
       >
         外す

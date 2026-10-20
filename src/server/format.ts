@@ -6,7 +6,7 @@ import { NEXT_COUNT, nextReason } from '../shared/next.ts';
 import { isContainer, isFinishedSeries } from '../shared/series.ts';
 import { anchorLabel, flatten, offsetLabel } from '../shared/templates.ts';
 import { fmtAmount, goalRuleText, periodCounter, progressText } from '../shared/goals.ts';
-import type { Category, Goal, GoalDetail, Memo, Note, Recurrence, Task, TaskDetail, Template, TodayView } from '../shared/types.ts';
+import type { Category, Goal, GoalDetail, GoalPlan, Memo, Note, Recurrence, Task, TaskDetail, Template, TodayView } from '../shared/types.ts';
 
 const WEEKDAY = ['', '月', '火', '水', '木', '金', '土', '日'];
 
@@ -172,5 +172,16 @@ export function goalDetailText(g: GoalDetail, limit = 30): string {
     ...(g.notes.trim() ? ['メモ:', ...g.notes.trim().split('\n').map((l) => `  ${l}`)] : []),
     g.logs.length ? `記録（${g.logs.length}件${g.logs.length > limit ? `・新しい ${limit} 件` : ''}）:` : '記録: まだない',
     ...logs.map((l) => `- ${l.date} ${fmtAmount(l.amount, g.unit)}${l.note ? ` ${l.note}` : ''}`),
+    ...goalPlansText(g.plans.filter((p) => !p.done)),
   ].join('\n');
+}
+
+/** やる時間の1行: - #12 2026-10-21 21:00〜(30m) 10ページ（済） */
+export function goalPlanLine(p: GoalPlan): string {
+  const when = p.start ? ` ${p.start}〜${p.minutes ? `(${minutes(p.minutes)})` : ''}` : '（時刻なし）';
+  return `- #${p.id} ${p.date}${when}${p.amount !== null ? ` ${fmtAmount(p.amount, p.unit)}` : ''}${p.done ? '（済）' : ''}`;
+}
+
+function goalPlansText(plans: GoalPlan[]): string[] {
+  return plans.length ? [`やる時間（まだのもの ${plans.length}件）:`, ...plans.map(goalPlanLine)] : [];
 }

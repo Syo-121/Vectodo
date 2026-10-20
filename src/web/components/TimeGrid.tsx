@@ -5,10 +5,12 @@
 // - 置いたタスク: ドラッグで動かす（別の日へも）・下の端で長さを変える・上の「終日」の段へ落とすと時刻を外す
 // - 終日の段のタスク（時刻の無いやる日）: 別の日の終日へ落とすとやる日が移る・時間の欄へ落とすとその時刻に置く
 // マウスは押してすぐ、指は長押し（0.35秒）してから動かす（その前に動かすとスクロール）。
+// 目標をやる時間（design 4-14）は、やる日1日だけのタスクの形に写して tasks に混ぜて渡す（goalPlans.ts）。緑で描き、押すと onOpenPlan。
 
 import { useEffect, useRef, useState } from 'react';
 import { allDayOn, fmtClock, PLACE_DEFAULT_MIN, placedSpan, timedOn } from '../../shared/flow.ts';
-import type { Category, OverlayEvent, Task } from '../../shared/types.ts';
+import type { Category, GoalPlan, OverlayEvent, Task } from '../../shared/types.ts';
+import { planOf } from '../goalPlans.ts';
 import { lanes, placeOn, slotAt, snap, SNAP, unplaceTo, type Draft, type Slot } from '../grid.ts';
 import { useWideScreen } from '../media.ts';
 import { useOpenTask } from '../nav.ts';
@@ -48,6 +50,7 @@ export function TimeGrid({
   head,
   onPlace,
   onSetDates,
+  onOpenPlan,
   pending,
   focus,
   className,
@@ -71,6 +74,8 @@ export function TimeGrid({
   onPlace: (slot: Slot) => void;
   /** やる日を書き換える（落としたとき）。終わるまでは落とした位置に見せる */
   onSetDates: (task: Task, dates: Task['doDates']) => Promise<unknown>;
+  /** 目標をやる時間を押したとき（記録・外す・時刻を変えるシートを開く） */
+  onOpenPlan?: (plan: GoalPlan) => void;
   /** 置こうとしている時間（パネルを開いている間、選んだまま見せる） */
   pending: (Draft & { date: string }) | null;
   /** 変わったら、置こうとしている時間が見えるようにスクロールする */
@@ -268,13 +273,19 @@ export function TimeGrid({
     );
   };
 
+  /** 押したら開く: 目標をやる時間ならその予定のシート、タスクなら詳細 */
+  const openItem = (id: number) => {
+    const plan = planOf(tasks.find((t) => t.id === id));
+    return plan ? onOpenPlan?.(plan) : openTask(id);
+  };
+
   const tap = (d: Drag) => {
-    if (d.kind === 'open') return openTask(d.id);
+    if (d.kind === 'open') return openItem(d.id);
     if (d.kind === 'new') {
       const c = cols[d.col]!;
       return onPlace(slotAt(c.date, d.anchor, c.timed.map((x) => ({ start: x.start, end: x.end, title: x.event.title })), dayEnd));
     }
-    return openTask(d.task.id);
+    return openItem(d.task.id);
   };
 
   /** ブロック・カードを落とす先（時間の欄なら始める時刻も） */
@@ -339,7 +350,9 @@ export function TimeGrid({
   const hours: number[] = [];
   for (let m = lo; m <= hi; m += 60) hours.push(m);
   const pos = (col: number, n: number) => ({ left: `calc(${(col / n) * 100}% + 1px)`, width: `calc(${100 / n}% - 3px)` });
-  const catColor = (t: Task) => (t.categoryId !== null ? categories?.get(t.categoryId)?.color : undefined) ?? '#a1a1aa';
+  // 目標をやる時間は緑（emerald-500）
+  const catColor = (t: Task) =>
+    planOf(t) ? '#10b981' : ((t.categoryId !== null ? categories?.get(t.categoryId)?.color : undefined) ?? '#a1a1aa');
   const minWidth = colMin ? 40 + colMin * days.length : undefined;
 
   return (
@@ -503,6 +516,7 @@ export function TimeGrid({
                   const e2 = resizing ? Math.max(start + SNAP, drag.cur) : end;
                   const h = Math.max((e2 - start) * PX, 16);
                   const lifted = moving?.task.id === item.t.id && moving.from === c.date;
+                  const goal = planOf(item.t) !== undefined;
                   return (
                     <div
                       key={`p${item.t.id}`}
@@ -510,10 +524,16 @@ export function TimeGrid({
                       className={cx(
                         'absolute overflow-hidden rounded-md px-1.5 py-0.5 text-[11px] leading-tight shadow-sm',
                         item.done
-                          ? 'cursor-pointer border border-zinc-300 bg-zinc-100 text-zinc-400 line-through dark:border-zinc-700 dark:bg-zinc-800'
+                          ? goal
+                            ? 'cursor-pointer border border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                            : 'cursor-pointer border border-zinc-300 bg-zinc-100 text-zinc-400 line-through dark:border-zinc-700 dark:bg-zinc-800'
                           : item.over
-                            ? 'cursor-grab border border-indigo-500 bg-indigo-50 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200'
-                            : 'cursor-grab bg-indigo-500 text-white',
+                            ? goal
+                              ? 'cursor-grab border border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+                              : 'cursor-grab border border-indigo-500 bg-indigo-50 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200'
+                            : goal
+                              ? 'cursor-grab bg-emerald-600 text-white'
+                              : 'cursor-grab bg-indigo-500 text-white',
                         resizing && 'z-20 ring-2 ring-indigo-300',
                         lifted && 'opacity-30',
                       )}
@@ -521,6 +541,7 @@ export function TimeGrid({
                     >
                       <div className="truncate font-medium">
                         {item.over && !item.done && <span className="mr-1 font-normal opacity-80">ながら</span>}
+                        {goal && item.done && '✓ '}
                         {item.t.title}
                       </div>
                       {h >= 30 && (
@@ -531,7 +552,7 @@ export function TimeGrid({
                       {/* 下の端: ドラッグで長さを変える */}
                       {!item.done && (
                         <div data-edge="1" className="absolute inset-x-0 bottom-0 flex h-2.5 cursor-ns-resize items-end justify-center pb-0.5">
-                          <span className={cx('h-0.5 w-5 rounded-full', item.over ? 'bg-indigo-400' : 'bg-white/70')} />
+                          <span className={cx('h-0.5 w-5 rounded-full', item.over ? (goal ? 'bg-emerald-400' : 'bg-indigo-400') : 'bg-white/70')} />
                         </div>
                       )}
                     </div>

@@ -12,6 +12,8 @@ import {
   zGoalCreate,
   zGoalLogCreate,
   zGoalPatch,
+  zGoalPlanCreate,
+  zGoalPlanPatch,
   zMemoCreate,
   zMemoPatch,
   zMemoStatusFilter,
@@ -221,6 +223,19 @@ export function createApi(s: Services): Hono {
   });
   api.post('/goals/:id/logs', async (c) => c.json(s.goals.addLog(goalId(c), await body(c, zGoalLogCreate)), 201));
   api.delete('/goals/:id/logs/:logId', (c) => c.json(s.goals.deleteLog(intParam(c, 'logId'))));
+  // やる時間（design 4-14）。from・to の期間（62日まで）
+  api.get('/goal-plans', (c) => {
+    const from = zDate.parse(c.req.query('from'));
+    const to = zDate.parse(c.req.query('to'));
+    if (to < from || diffDays(to, from) > 62) throw badRequest('期間は62日まで');
+    return c.json(s.goals.plans({ from, to }));
+  });
+  api.post('/goals/:id/plans', async (c) => c.json(s.goals.addPlan(goalId(c), await body(c, zGoalPlanCreate)), 201));
+  api.patch('/goal-plans/:id', async (c) => c.json(s.goals.updatePlan(intParam(c, 'id'), await body(c, zGoalPlanPatch))));
+  api.delete('/goal-plans/:id', (c) => {
+    s.goals.deletePlan(intParam(c, 'id'));
+    return c.json({ ok: true });
+  });
 
   // ── 設定
   api.get('/settings', (c) => c.json(s.settings.get()));

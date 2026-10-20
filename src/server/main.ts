@@ -24,6 +24,7 @@ const db = openDb(config.dbPath);
 const tasks = new TaskService(db, clock);
 const categories = new CategoryService(db);
 const settings = new SettingsService(db);
+const goals = new GoalService(db, clock);
 
 // Google カレンダー同期（design 4-7）。同意画面からは PC のブラウザで 127.0.0.1 に戻ってくる
 const google = new GoogleClient(config.gcal, `http://127.0.0.1:${config.port}/oauth/callback`);
@@ -31,6 +32,8 @@ const gcal = new GcalSync(db, tasks, categories, settings, clock, google, {
   appUrl: config.gcal.appUrl,
   timezone: config.timezone,
   pauseMs: 150,
+  // 目標をやる時間も書き出す（design 4-14）
+  goalPlans: () => goals.plans(),
 });
 
 const services: Services = {
@@ -41,7 +44,7 @@ const services: Services = {
   memos: new MemoService(db, clock, tasks),
   notes: new NoteService(db, clock),
   templates: new TemplateService(db, clock, tasks),
-  goals: new GoalService(db, clock),
+  goals,
   gcal,
 };
 

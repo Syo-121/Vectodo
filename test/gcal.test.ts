@@ -356,3 +356,50 @@ describe('同期（偽の Google で）', () => {
     expect(await gcal.run()).toMatchObject({ created: 0, updated: 0 });
   });
 });
+
+describe('目標をやる時間の書き出し（design 4-14）', () => {
+  it('時刻つきは5分前の通知・時刻なしは終日。記録すると【済】・外すと消す・アーカイブで先の予定は消える', async () => {
+    const s = setup(TODAY);
+    const google = new FakeGoogle();
+    const gcal = new GcalSync(s.db, s.tasks, s.categories, s.settings, s.clock, google, {
+      appUrl: 'https://app.example:5180',
+      timezone: 'Asia/Tokyo',
+      goalPlans: () => s.goals.plans(),
+    });
+    await gcal.mapCalendars();
+    const g = s.goals.create({ title: '回路の本', kind: 'rate', period: 'day', target: 10, unit: 'ページ' });
+    const timed = s.goals.addPlan(g.id, { date: TODAY, start: '21:00', minutes: 30, amount: 10 });
+    s.goals.addPlan(g.id, { date: '2026-10-14', amount: 10 });
+    expect(await gcal.run()).toMatchObject({ created: 2, errors: [] });
+    expect(google.calls).toEqual(['insert cal-other 【目標】回路の本 10ページ', 'insert cal-other 【目標】回路の本 10ページ']);
+    const bodies = [...google.events.values()].map((e) => e.body!);
+    expect(bodies[0]).toMatchObject({
+      start: { dateTime: '2026-10-13T21:00:00+09:00' },
+      end: { dateTime: '2026-10-13T21:30:00+09:00' },
+      colorId: '10',
+      reminders: { overrides: [{ method: 'popup', minutes: 5 }] },
+      extendedProperties: { private: { vectodo: '1', task: '0', slot: `goal:${timed.id}` } },
+    });
+    expect(bodies[0]!.description).toBe('目標: G-001 1日に10ページ（Vectodo で管理）\nhttps://app.example:5180/goals/1');
+    expect(bodies[1]).toMatchObject({ start: { date: '2026-10-14' }, end: { date: '2026-10-15' } });
+
+    // 記録するとその日の予定が済になり、【済】にして通知を外す
+    s.goals.addLog(g.id, { amount: 10 });
+    google.calls = [];
+    await gcal.run();
+    expect(google.calls).toEqual(['update cal-other 【済】【目標】回路の本 10ページ']);
+    expect([...google.events.values()][0]!.body!.reminders.overrides).toEqual([]);
+
+    // 外したら消す
+    s.goals.deletePlan(timed.id);
+    google.calls = [];
+    await gcal.run();
+    expect(google.calls).toEqual(['remove cal-other ev1']);
+
+    // アーカイブすると先の予定は消える
+    s.goals.update(g.id, { archived: true });
+    google.calls = [];
+    await gcal.run();
+    expect(google.calls).toEqual(['remove cal-other ev2']);
+  });
+});

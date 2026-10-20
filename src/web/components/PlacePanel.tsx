@@ -2,14 +2,17 @@
 // （持ち越しの過ぎた日は外す＝「今日やる」と同じ）。元に戻せる。予定に重ねる（ながら）ときも同じ。
 // 時間割に重ならないように出す: 今日の画面の広い画面は右の欄（詳細の欄を借りる）・ボードの広い画面は時間割の右の列・それ以外は画面の下半分
 // （背景を暗くしない＝時間割の選んだ時間が見えたまま）。
+// 上に「目標をやる時間にする」（design 4-14）: 目標を押すと、タスクは作らずにその時間に目標の予定を入れる。
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { fmtClock, PLACE_DEFAULT_MIN, toMin } from '../../shared/flow.ts';
+import { fmtAmount, logFrom } from '../../shared/goals.ts';
 import { nextReason } from '../../shared/next.ts';
-import type { NextItem, Task } from '../../shared/types.ts';
-import { api, useWrite } from '../api.ts';
+import type { Goal, NextItem, Task } from '../../shared/types.ts';
+import { api, useGoals, useGoalWrite, useWrite } from '../api.ts';
+import { planAmount } from '../goalPlans.ts';
 import type { Draft, Slot } from '../grid.ts';
 import { SIDE_PANEL_ID } from '../sidePanel.ts';
 import { toast } from '../toast.ts';
@@ -86,6 +89,23 @@ export function PlacePanel({
   const start = fmtClock(draft.start);
   const day = isToday ? '' : `${fmtDate(date, today)} `;
 
+  // 目標をやる時間にする: 数えている（終わっていない）目標のうち、その日に置けるもの。長さは選んだ長さ（見積どおりなら 30m）
+  const { data: goals = [] } = useGoals();
+  const goalOptions = goals.filter((g) => !g.progress.ended && date >= logFrom(g));
+  const addPlan = useGoalWrite((g: Goal) =>
+    api.addGoalPlan(g.id, { date, start, minutes: draft.len ?? PLACE_DEFAULT_MIN, amount: planAmount(g) }),
+  );
+  const chooseGoal = (g: Goal) =>
+    addPlan.mutate(g, {
+      onSuccess: (p) => {
+        onClose();
+        toast(`${g.title} を ${day}${start}–${fmtClock(draft.start + (p.minutes ?? PLACE_DEFAULT_MIN))} に置いた`, 'info', {
+          label: '元に戻す',
+          run: () => void api.deleteGoalPlan(p.id).then(() => qc.invalidateQueries({ queryKey: ['goals'] })),
+        });
+      },
+    });
+
   const choose = (t: Task) => {
     const minutes = lengthOf(t);
     const before = t.doDates.map((d) => ({ ...d, start: d.start ?? null }));
@@ -151,6 +171,28 @@ export function PlacePanel({
           ))}
         </div>
       </div>
+      {goalOptions.length > 0 && (
+        <div className="mt-3">
+          <p className="mb-1.5 text-xs text-zinc-500">目標をやる時間にする</p>
+          <div className="flex flex-wrap gap-1.5">
+            {goalOptions.map((g) => {
+              const amount = planAmount(g);
+              return (
+                <button
+                  key={g.id}
+                  type="button"
+                  disabled={addPlan.isPending}
+                  onClick={() => chooseGoal(g)}
+                  className="rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1 text-sm text-emerald-800 active:scale-95 disabled:opacity-50 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+                >
+                  🎯 {g.title}
+                  {amount !== null && <span className="ml-1 text-xs opacity-75">{fmtAmount(amount, g.unit)}</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
       <p className="mt-3 mb-1 text-xs text-zinc-500">どれを置く？（{fmtSpan(Math.max(0, room))}に入るものを先に・次にやる順）</p>
       {candidates.length === 0 && <p className="py-3 text-center text-sm text-zinc-400">次にやるものの候補が無い。下から探して置ける。</p>}
       <div className="divide-y divide-zinc-200/70 dark:divide-zinc-800">

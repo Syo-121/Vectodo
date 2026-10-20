@@ -1,13 +1,16 @@
 // ボードの「日」「週」（design 7-8）: 時間割（components/TimeGrid.tsx・今日の流れと同じ操作）と、置くパネル。
 // パネルは時間割に重ねない: 広い画面は時間割の右の列、それ以外は画面の下半分。
+// 目標をやる時間（design 4-14）も緑で重ねる（動かすと予定の日付・時刻が変わる・押すと記録のシート）。
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { rankNext } from '../../shared/next.ts';
-import type { Category, OverlayEvent, Task } from '../../shared/types.ts';
-import { useSettings } from '../api.ts';
+import type { Category, GoalPlan, OverlayEvent, Task } from '../../shared/types.ts';
+import { api, useGoalPlans, useGoalWrite, useSettings } from '../api.ts';
+import { PlanSheet } from '../components/GoalSheets.tsx';
 import { PlacePanel, usePlacing } from '../components/PlacePanel.tsx';
 import { TimeGrid } from '../components/TimeGrid.tsx';
 import { useNow } from '../components/TodayFlow.tsx';
+import { planOf, planPatch, planTask } from '../goalPlans.ts';
 import { useMediaQuery, useWideScreen } from '../media.ts';
 import { useOpenTaskId } from '../nav.ts';
 import { cx } from '../util.ts';
@@ -48,6 +51,14 @@ export function BoardTimeGrid({
   const candidates = slot
     ? rankNext(pool, today).filter((n) => !n.task.doDates.some((d) => d.date === slot.date && d.start))
     : [];
+  // 目標をやる時間を、やる日1日だけのタスクの形にして混ぜる
+  const { data: plans = [] } = useGoalPlans(days[0]!, days.at(-1)!);
+  const [openPlan, setOpenPlan] = useState<GoalPlan | null>(null);
+  const movePlan = useGoalWrite((a: { id: number; dates: Task['doDates'] }) => api.updateGoalPlan(a.id, planPatch(a.dates)));
+  const setDates = (t: Task, dates: Task['doDates']) => {
+    const plan = planOf(t);
+    return plan ? movePlan.mutateAsync({ id: plan.id, dates }).catch(() => undefined) : onSetDates(t, dates);
+  };
 
   return (
     <div className={cx('px-4 pb-4', slot && wide && 'grid grid-cols-[minmax(0,1fr)_22rem] items-start gap-3')}>
@@ -58,23 +69,25 @@ export function BoardTimeGrid({
           today={today}
           now={now}
           events={events}
-          tasks={tasks}
+          tasks={[...tasks, ...plans.map(planTask)]}
           categories={categories}
           dayStart={settings?.dayStartMin ?? 8 * 60}
           dayEnd={settings?.dayEndMin ?? 23 * 60}
           allDayRow
           head={head}
           onPlace={placing.open}
-          onSetDates={onSetDates}
+          onSetDates={setDates}
+          onOpenPlan={setOpenPlan}
           pending={placing.pending}
           focus={placing.focus}
           // 週はスマホで横にスクロール（1日の幅を潰しすぎない）
           colMin={days.length > 1 && !md ? 84 : 0}
         />
         <p className="mt-1.5 text-[11px] leading-relaxed text-zinc-400">
-          ドラッグで時間を選んでタスクを置く（スマホは長押ししてから・予定の上でもよい＝ながら）。タップならその時刻から。置いたタスクはドラッグで動かし（別の日へも）、下の端で長さを変える。上の「終日」のタスクは、時間の欄へ落とすとその時刻に・別の日の終日へ落とすとやる日が移る。Google に時刻つきで入る。
+          ドラッグで時間を選んでタスクや目標を置く（スマホは長押ししてから・予定の上でもよい＝ながら）。タップならその時刻から。置いたものはドラッグで動かし（別の日へも）、下の端で長さを変える。上の「終日」のものは、時間の欄へ落とすとその時刻に・別の日の終日へ落とすとやる日が移る。Google に時刻つきで入る。緑の枠は目標をやる時間（押すと記録できる）。
         </p>
       </div>
+      {openPlan && <PlanSheet plan={openPlan} onClose={() => setOpenPlan(null)} />}
       {slot && (
         <PlacePanel
           slot={slot}

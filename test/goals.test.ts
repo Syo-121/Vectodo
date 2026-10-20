@@ -158,7 +158,7 @@ describe('目標のサービスと API・MCP', () => {
       result: { tools: { name: string }[] };
     };
     const names = list.result.tools.map((t) => t.name).filter((n) => n.includes('goal'));
-    expect(names.sort()).toEqual(['add_goal', 'get_goal', 'list_goals', 'log_goal']);
+    expect(names.sort()).toEqual(['add_goal', 'get_goal', 'list_goals', 'log_goal', 'plan_goal']);
     const call = (await (
       await mcp({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'log_goal', arguments: { goal: 'プール', note: '90分' } } })
     ).json()) as { result: { content: { text: string }[] } };

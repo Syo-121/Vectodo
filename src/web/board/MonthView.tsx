@@ -1,10 +1,13 @@
 // 月（v3・design 7-11）。月曜はじまりの表でタスクを日付で眺め、選んだ日の中身を下に並べる。
 // やる日のカードは別の日へドラッグで移せる（PC は表の中のカードも、スマホは下の一覧から長押しで表の日へ）。
 // Google の予定は薄い色で重ねる（タスクの予定は除いてある）。
+// 目標をやる時間（design 4-14）は緑で出し、選んだ日の下の［＋ 目標をやる時間を入れる］から入れる（押すと記録のシート）。
 
 import { useState } from 'react';
-import type { Category, OverlayEvent, Task } from '../../shared/types.ts';
-import { useOverlay } from '../api.ts';
+import { fmtAmount } from '../../shared/goals.ts';
+import type { Category, GoalPlan, OverlayEvent, Task } from '../../shared/types.ts';
+import { useGoalPlans, useOverlay } from '../api.ts';
+import { PlanCreateSheet, PlanSheet } from '../components/GoalSheets.tsx';
 import { TaskCard } from '../components/TaskRow.tsx';
 import { useWideScreen } from '../media.ts';
 import { useOpenTask } from '../nav.ts';
@@ -42,6 +45,11 @@ export function MonthView({
   const days = new Map(weekDays(tasks, from, grid.dates.length).map((d) => [d.date, d]));
   const { data: ov, isFetching } = useOverlay(from, to, overlay);
   const events = overlayByDay(overlay ? (ov?.events ?? []) : [], grid.dates);
+  // 目標をやる時間（日ごと）
+  const { data: plans = [] } = useGoalPlans(from, to);
+  const plansOn = (date: string) => plans.filter((p) => p.date === date);
+  const [openPlan, setOpenPlan] = useState<GoalPlan | null>(null);
+  const [adding, setAdding] = useState(false);
 
   const onDrop = (dragId: string, dropId: string) => {
     const [, idStr, fromDate] = dragId.split(':') as [string, string, string];
@@ -101,7 +109,9 @@ export function MonthView({
               isSelected={date === selected}
               wide={wide}
               categories={categories}
+              plans={plansOn(date)}
               onSelect={() => setSelected(date)}
+              onOpenPlan={setOpenPlan}
             />
           ))}
         </div>
@@ -138,12 +148,54 @@ export function MonthView({
             ),
           )}
         </div>
-        {!sel?.items.length && selEvents.length === 0 && <p className="py-3 text-center text-xs text-zinc-400">この日は何もない</p>}
+        {plansOn(selected).length > 0 && (
+          <div className="mt-2 flex flex-col gap-2">
+            {plansOn(selected).map((p) => (
+              <PlanCard key={p.id} plan={p} onOpen={() => setOpenPlan(p)} />
+            ))}
+          </div>
+        )}
+        {!sel?.items.length && selEvents.length === 0 && plansOn(selected).length === 0 && (
+          <p className="py-3 text-center text-xs text-zinc-400">この日は何もない</p>
+        )}
+        <button
+          type="button"
+          onClick={() => setAdding(true)}
+          className="mt-3 w-full rounded-xl border border-dashed border-emerald-400 py-2.5 text-sm text-emerald-700 dark:border-emerald-800 dark:text-emerald-300"
+        >
+          🎯 {md(selected)} に目標をやる時間を入れる
+        </button>
         <p className="mt-3 text-[11px] leading-relaxed text-zinc-400">
-          やる日のカードは、PC はドラッグ、スマホは長押しで表の別の日へ移せる。締切は詳細から変える。灰色の行は Google カレンダーの予定。
+          やる日のカードは、PC はドラッグ、スマホは長押しで表の別の日へ移せる。締切は詳細から変える。灰色の行は Google カレンダーの予定、緑は目標をやる時間（押すと記録・時間を変える・外す）。
         </p>
       </section>
+      {openPlan && <PlanSheet plan={openPlan} onClose={() => setOpenPlan(null)} />}
+      {adding && <PlanCreateSheet date={selected} onClose={() => setAdding(false)} />}
     </BoardDnd>
+  );
+}
+
+/** 選んだ日の下に並べる「目標をやる時間」（押すと記録のシート） */
+function PlanCard({ plan, onOpen }: { plan: GoalPlan; onOpen: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={cx(
+        'flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm',
+        plan.done
+          ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-300'
+          : 'border-emerald-300 bg-white dark:border-emerald-800 dark:bg-zinc-900',
+      )}
+      style={{ borderLeft: '4px solid #10b981' }}
+    >
+      <span className="w-12 shrink-0 text-xs text-zinc-500 tabular-nums">{plan.start ?? '終日'}</span>
+      <span className="min-w-0 flex-1 truncate font-medium">
+        🎯 {plan.title}
+        {plan.amount !== null && <span className="ml-1 font-normal text-zinc-500">{fmtAmount(plan.amount, plan.unit)}</span>}
+      </span>
+      {plan.done && <span className="shrink-0 text-xs font-medium">✓ 済</span>}
+    </button>
   );
 }
 
@@ -156,7 +208,9 @@ function DayCell({
   isSelected,
   wide,
   categories,
+  plans,
   onSelect,
+  onOpenPlan,
 }: {
   date: string;
   day: Day | undefined;
@@ -166,14 +220,17 @@ function DayCell({
   isSelected: boolean;
   wide: boolean;
   categories: Map<number, Category>;
+  /** 目標をやる時間（緑） */
+  plans: GoalPlan[];
   onSelect: () => void;
+  onOpenPlan: (plan: GoalPlan) => void;
 }) {
   const items = day?.items ?? [];
   const weekday = (new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7;
-  // タスクを先に出し、残りの枠に予定（多い日はタスクが「ほか N 件」に埋もれないように）
+  // タスク・目標をやる時間を先に出し、残りの枠に予定（多い日はタスクが「ほか N 件」に埋もれないように）
   const limit = 4;
-  const shown = wide ? [...items.map((i) => ({ i })), ...events.map((e) => ({ e }))].slice(0, limit) : [];
-  const more = events.length + items.length - shown.length;
+  const shown = wide ? [...items.map((i) => ({ i })), ...plans.map((p) => ({ p })), ...events.map((e) => ({ e }))].slice(0, limit) : [];
+  const more = events.length + items.length + plans.length - shown.length;
 
   return (
     <Droppable
@@ -194,7 +251,7 @@ function DayCell({
           {Number(date.slice(8))}
         </span>
         {!wide && (
-          // スマホ: 文字は入らないので、予定（灰）・やる日（藍）・締切（赤）を点で
+          // スマホ: 文字は入らないので、予定（灰）・やる日（藍）・締切（赤）・目標をやる時間（緑）を点で
           <span className="mt-0.5 flex flex-wrap gap-0.5 px-0.5">
             {events.slice(0, 3).map((e) => (
               <span key={e.id} className="size-1.5 rounded-full" style={{ background: e.color ?? '#a1a1aa', opacity: 0.6 }} />
@@ -205,13 +262,33 @@ function DayCell({
                 className={cx('size-1.5 rounded-full', it.kind === 'due' ? 'bg-red-500' : 'bg-indigo-500')}
               />
             ))}
+            {plans.slice(0, 3).map((p) => (
+              <span key={`g${p.id}`} className={cx('size-1.5 rounded-full', p.done ? 'bg-emerald-300' : 'bg-emerald-500')} />
+            ))}
           </span>
         )}
       </button>
       {wide && (
         <div className="mt-0.5 flex flex-col gap-0.5">
           {shown.map((x) =>
-            'e' in x ? (
+            'p' in x ? (
+              <button
+                key={`g${x.p.id}`}
+                type="button"
+                onClick={() => onOpenPlan(x.p)}
+                className={cx(
+                  'block w-full truncate rounded px-1 text-left text-[10px] leading-4',
+                  x.p.done
+                    ? 'bg-emerald-50 text-emerald-600 opacity-70 dark:bg-emerald-950/50 dark:text-emerald-400'
+                    : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-100',
+                )}
+                title={x.p.title}
+              >
+                {x.p.done ? '✓ ' : '🎯 '}
+                {x.p.start && <span className="mr-1 tabular-nums">{x.p.start}</span>}
+                {x.p.title}
+              </button>
+            ) : 'e' in x ? (
               <div key={x.e.id} className="truncate rounded px-1 text-[10px] leading-4 text-zinc-500" title={`${x.e.calendar}: ${x.e.title}`}>
                 <span className="mr-1 inline-block size-1.5 rounded-full align-middle" style={{ background: x.e.color ?? '#a1a1aa' }} />
                 {x.e.start && <span className="mr-1 tabular-nums">{x.e.start}</span>}
