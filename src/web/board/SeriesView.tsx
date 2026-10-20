@@ -19,10 +19,11 @@ import { layoutDag, missingChain, type Edge, type Point } from './dag.ts';
 
 type Dir = 'down' | 'right';
 
-/** ノードの大きさと間隔（main＝流れる向き・cross＝同じ段の横並び） */
+/** ノードの大きさと間隔（main＝流れる向き・cross＝同じ段の横並び）。
+ *  h はタイトル2行が収まる高さ（枠 2＋余白 16＋上の行 10＋間 4＋2行 36 ≒ 68）。足りないと2行目の下が欠ける */
 const GEOM: Record<Dir, { w: number; h: number; main: number; cross: number }> = {
-  down: { w: 150, h: 66, main: 40, cross: 14 },
-  right: { w: 184, h: 62, main: 52, cross: 14 },
+  down: { w: 150, h: 70, main: 40, cross: 14 },
+  right: { w: 184, h: 70, main: 52, cross: 14 },
 };
 
 /** 段と列 → 左上の座標 */
