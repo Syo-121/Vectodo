@@ -1,8 +1,9 @@
-// 即追加（design 7-2・7-5）。「タスク／メモ／テンプレ」を切り替えられる。タスクとメモは、保存したあと開いたまま続けて入れるか、
+// 即追加（design 7-2・7-5）。「タスク／詳しく／メモ／テンプレ」を切り替えられる。タスクとメモは、保存したあと開いたまま続けて入れるか、
 // 1件で閉じるかを設定で選ぶ（端末ごと・addAfter.ts。閉じるのは保存できたときだけ＝失敗したら書いたものが残る）。
 // 保存の返事が来たらすぐ欄を空ける・閉じる（画面の取り直しは待たない）。返事を待っている間は二度押ししても送らない。
 // タスク: Enter で保存。何も選ばなければ受信箱に入る。
 // メモ: Enter は改行、Ctrl＋Enter（⌘＋Enter）か「保存」で保存。受信箱に入り、あとで AI が記録やタスクへ振り分ける。
+// 詳しく: 全項目を1画面で入れて「作成」で1回だけ保存する（FullTaskForm.tsx）。
 // テンプレ: テンプレートを選び、基準日とタイトルを入れて親・子・依存をまとめて作る（design 4-8）。作ったらシートは閉じる。
 
 import { useEffect, useRef, useState } from 'react';
@@ -16,8 +17,10 @@ import { sendOrQueue } from '../outbox.ts';
 import { toast } from '../toast.ts';
 import { addDays, clientToday, cx, fmtDate } from '../util.ts';
 import { DatePicker } from './DatePicker.tsx';
+import { FullTaskForm } from './FullTaskForm.tsx';
+import { Buttons, chip } from './SheetParts.tsx';
 
-export type QuickAddMode = 'task' | 'memo' | 'template';
+export type QuickAddMode = 'task' | 'full' | 'memo' | 'template';
 
 export function QuickAdd({
   categories,
@@ -38,12 +41,15 @@ export function QuickAdd({
   return (
     <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/30 md:items-start md:pt-[15vh]" onClick={onClose}>
       <div
-        className="pb-safe w-full max-w-xl rounded-t-2xl bg-white p-4 shadow-xl md:rounded-2xl dark:bg-zinc-900"
+        className="pb-safe scroll-hidden max-h-[90dvh] w-full max-w-xl overflow-y-auto rounded-t-2xl bg-white p-4 shadow-xl md:max-h-[80vh] md:rounded-2xl dark:bg-zinc-900"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex rounded-lg bg-zinc-100 p-0.5 dark:bg-zinc-800">
           <button type="button" className={tab(mode === 'task')} onClick={() => onModeChange('task')}>
             ☑ タスク
+          </button>
+          <button type="button" className={tab(mode === 'full')} onClick={() => onModeChange('full')}>
+            ☰ 詳しく
           </button>
           <button type="button" className={tab(mode === 'memo')} onClick={() => onModeChange('memo')}>
             ✎ メモ
@@ -54,6 +60,8 @@ export function QuickAdd({
         </div>
         {mode === 'task' ? (
           <TaskForm categories={categories} onClose={onClose} />
+        ) : mode === 'full' ? (
+          <FullTaskForm categories={categories} onClose={onClose} />
         ) : mode === 'memo' ? (
           <MemoForm onClose={onClose} />
         ) : (
@@ -341,32 +349,5 @@ function TemplateForm({ onClose }: { onClose: () => void }) {
         <Buttons onClose={onClose} onSubmit={submit} disabled={!shownTitle.trim() || apply.isPending} label="作る" />
       </div>
     </>
-  );
-}
-
-function chip(active: boolean) {
-  return cx(
-    'rounded-full border px-3 py-1 text-sm transition',
-    active
-      ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300'
-      : 'border-zinc-300 text-zinc-600 dark:border-zinc-700 dark:text-zinc-300',
-  );
-}
-
-function Buttons({ onClose, onSubmit, disabled, label }: { onClose: () => void; onSubmit: () => void; disabled: boolean; label: string }) {
-  return (
-    <div className="ml-auto flex gap-2">
-      <button type="button" onClick={onClose} className="px-2 py-1 text-sm text-zinc-500">
-        閉じる
-      </button>
-      <button
-        type="button"
-        onClick={onSubmit}
-        disabled={disabled}
-        className="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-40"
-      >
-        {label}
-      </button>
-    </div>
   );
 }
