@@ -3,12 +3,15 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { diffDays } from '../shared/dates.ts';
-import { parseMemoRef, parseNoteRef, parseTaskRef } from '../shared/ids.ts';
+import { parseGoalRef, parseMemoRef, parseNoteRef, parseTaskRef } from '../shared/ids.ts';
 import {
   zCategoryCreate,
   zCategoryPatch,
   zDate,
   zDoDate,
+  zGoalCreate,
+  zGoalLogCreate,
+  zGoalPatch,
   zMemoCreate,
   zMemoPatch,
   zMemoStatusFilter,
@@ -28,6 +31,7 @@ import { transaction, type DB } from './db.ts';
 import { AppError, badRequest } from './errors.ts';
 import { GoogleError } from './gcal/google.ts';
 import type { GcalSync } from './gcal/sync.ts';
+import type { GoalService } from './goals.ts';
 import type { MemoService } from './memos.ts';
 import type { NoteService } from './notes.ts';
 import { zSettingsPatch, type SettingsService } from './settings.ts';
@@ -42,6 +46,7 @@ export interface Services {
   memos: MemoService;
   notes: NoteService;
   templates: TemplateService;
+  goals: GoalService;
   /** Google カレンダー同期（v2・design 4-7）。テストなどでは無い */
   gcal?: GcalSync;
 }
@@ -54,6 +59,12 @@ function needGcal(s: Services): GcalSync {
 function noteId(c: Context): number {
   const id = parseNoteRef(c.req.param('id') ?? '');
   if (id === null) throw badRequest('ノート番号が読めない');
+  return id;
+}
+
+function goalId(c: Context): number {
+  const id = parseGoalRef(c.req.param('id') ?? '');
+  if (id === null) throw badRequest('目標の番号が読めない');
   return id;
 }
 
@@ -198,6 +209,18 @@ export function createApi(s: Services): Hono {
     s.notes.delete(noteId(c));
     return c.json({ ok: true });
   });
+
+  // ── 目標（design 3-6f・4-13）
+  api.get('/goals', (c) => c.json(s.goals.list({ archived: c.req.query('archived') === '1' })));
+  api.get('/goals/:id', (c) => c.json(s.goals.get(goalId(c))));
+  api.post('/goals', async (c) => c.json(s.goals.create(await body(c, zGoalCreate)), 201));
+  api.patch('/goals/:id', async (c) => c.json(s.goals.update(goalId(c), await body(c, zGoalPatch))));
+  api.delete('/goals/:id', (c) => {
+    s.goals.delete(goalId(c));
+    return c.json({ ok: true });
+  });
+  api.post('/goals/:id/logs', async (c) => c.json(s.goals.addLog(goalId(c), await body(c, zGoalLogCreate)), 201));
+  api.delete('/goals/:id/logs/:logId', (c) => c.json(s.goals.deleteLog(intParam(c, 'logId'))));
 
   // ── 設定
   api.get('/settings', (c) => c.json(s.settings.get()));

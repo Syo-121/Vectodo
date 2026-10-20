@@ -1,6 +1,6 @@
 // 今日（design 7-3・4-10・4-11）: いちばん上に「次にやること」3件（なぜそれかの一言と、今日やる／明日のボタン）、
 // その下に「今日の流れ」（Google の予定と締切を1本の時間軸に並べ、このあとの空きを出す）と「その次に」（今日〜数日のうちに見ておくもの）、
-// 畳んだ「近いうちに（7日以内）」「待っているもの」「今日完了」。
+// 畳んだ「近いうちに（7日以内）」「待っているもの」「今日完了」。「次にやること」の下に目標の進み具合と［＋］（design 7-15）。
 // 並べ方はサーバが shared/next.ts の rankNext で決める（MCP の今日と同じ順）。右上は今日の分の時間と、このあとの空き。
 
 import { useQuery } from '@tanstack/react-query';
@@ -9,7 +9,8 @@ import { Link } from 'react-router';
 import { dayFlow, fmtClock } from '../../shared/flow.ts';
 import { duePassed, NEXT_COUNT, nextReason, TODAY_KINDS } from '../../shared/next.ts';
 import type { Category, NextItem, NextKind, Task } from '../../shared/types.ts';
-import { api, useCategories, useOverlay, useSettings, useToday, useWrite } from '../api.ts';
+import { api, useCategories, useGoals, useOverlay, useSettings, useToday, useWrite } from '../api.ts';
+import { GoalTodayRow } from '../components/GoalParts.tsx';
 import { PageHeader } from '../components/Layout.tsx';
 import { FlowSection, useNow } from '../components/TodayFlow.tsx';
 import { CloseButton, TaskRow } from '../components/TaskRow.tsx';
@@ -40,6 +41,9 @@ export function TodayPage() {
   const categories = new Map(cats.map((c) => [c.id, c]));
   const now = useNow();
   const { data: gcal } = useOverlay(v?.today ?? '', v?.today ?? '', !!v);
+  // 目標は、いま数えているもの（始まっていない・終わったものは出さない）
+  const { data: goals = [] } = useGoals();
+  const activeGoals = goals.filter((g) => !g.progress.notStarted && !g.progress.ended);
 
   if (isLoading || !v) return <p className="p-4 text-sm text-zinc-400">読み込み中…</p>;
   const today = v.today;
@@ -112,6 +116,22 @@ export function TodayPage() {
           <div className={cx(CARD, 'border-indigo-200 dark:border-indigo-900')}>
             {top.map((n) => (
               <NextRow key={n.task.id} n={n} today={today} now={clock} categories={categories} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {activeGoals.length > 0 && (
+        <section className="mt-6">
+          <h2 className={cx(H2, 'flex items-baseline')}>
+            目標
+            <Link to="/goals" className="ml-auto font-normal text-indigo-600 dark:text-indigo-400">
+              すべて →
+            </Link>
+          </h2>
+          <div className={CARD}>
+            {activeGoals.map((g) => (
+              <GoalTodayRow key={g.id} g={g} />
             ))}
           </div>
         </section>

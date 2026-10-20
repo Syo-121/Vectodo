@@ -5,6 +5,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
 import { Layout } from './components/Layout.tsx';
 import './index.css';
 import { BoardPage } from './pages/BoardPage.tsx';
+import { GoalsPage } from './pages/GoalsPage.tsx';
 import { InboxPage } from './pages/InboxPage.tsx';
 import { ListPage } from './pages/ListPage.tsx';
 import { NotesPage } from './pages/NotesPage.tsx';
@@ -18,7 +19,7 @@ const queryClient = new QueryClient({
   defaultOptions: {
     // AI（MCP）が裏で書き換えることがあるので、画面に戻ったら取り直す。
     // 電波がなくても読み取りは投げる（sw.js が端末に残しておいた中身を返す）。書き込みは React Query に溜めさせない
-    // （メモ・タスクの追加・ノートのチェックは web/outbox.ts が端末に溜める。それ以外はその場で失敗を知らせる）
+    // （メモ・タスクの追加・ノートのチェック・目標の記録は web/outbox.ts が端末に溜める。それ以外はその場で失敗を知らせる）
     queries: { staleTime: 5_000, refetchOnWindowFocus: true, retry: 1, networkMode: 'offlineFirst' },
     mutations: { networkMode: 'always' },
   },
@@ -35,6 +36,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/list" element={<ListPage />} />
             <Route path="/inbox" element={<InboxPage />} />
             <Route path="/notes" element={<NotesPage />} />
+            <Route path="/goals" element={<GoalsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/today" replace />} />
           </Route>

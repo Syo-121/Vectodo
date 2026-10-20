@@ -9,6 +9,7 @@ import type { DoDateInput, TaskCreateInput } from '../src/shared/schemas.ts';
 import { CategoryService } from '../src/server/categories.ts';
 import { PROJECT_ROOT } from '../src/server/config.ts';
 import { openDb } from '../src/server/db.ts';
+import { GoalService } from '../src/server/goals.ts';
 import { MemoService } from '../src/server/memos.ts';
 import { NoteService } from '../src/server/notes.ts';
 import { TaskService } from '../src/server/tasks.ts';
@@ -45,6 +46,7 @@ const tasks = new TaskService(db, clock);
 const categories = new CategoryService(db);
 const memos = new MemoService(db, clock, tasks);
 const notes = new NoteService(db, clock);
+const goals = new GoalService(db, clock);
 const templates = new TemplateService(db, clock, tasks);
 
 const cat = (name: string, color: string) => categories.create({ name, color }).id;
@@ -190,6 +192,40 @@ notes.create({
   ],
 });
 notes.create({ title: '', kind: 'text', body: '駅の北口のラーメン屋、火曜定休。' });
+
+// ── 目標（design 3-6f・4-13）。過去の記録はその日にしたことにする
+const run = goals.create({ title: 'ジョギング', kind: 'rate', period: 'week', target: 3, startDate: d(-62) });
+for (const n of [62, 60, 58, 55, 53, 51, 48, 46, 41, 39, 37, 34, 32, 30, 27, 25, 23, 20, 18, 16, 13, 11, 9, 6, 4, 2, 0]) {
+  at(d(-n));
+  goals.addLog(run.id, { note: n % 3 === 0 ? '5km' : '' });
+}
+const words = goals.create({ title: '英単語', kind: 'rate', period: 'day', target: 30, unit: '語', startDate: d(-30) });
+for (let n = 27; n >= 0; n--) {
+  if (n % 5 === 3) continue;
+  at(d(-n));
+  goals.addLog(words.id, { amount: n === 0 ? 15 : n % 4 === 0 ? 20 : 30 });
+}
+const book = goals.create({
+  title: '技術書を1冊読む',
+  kind: 'total',
+  target: 320,
+  unit: 'ページ',
+  startDate: d(-20),
+  endDate: d(25),
+  notes: '「ドメイン駆動設計 入門」',
+});
+for (const [n, amount] of [
+  [19, 24],
+  [16, 30],
+  [13, 18],
+  [9, 26],
+  [6, 22],
+  [2, 15],
+] as const) {
+  at(d(-n));
+  goals.addLog(book.id, { amount, note: amount > 25 ? '週末にまとめて' : '' });
+}
+at(T);
 
 db.close();
 console.log(`デモの DB を作った: ${file}（今日= ${T}）`);

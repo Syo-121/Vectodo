@@ -5,7 +5,8 @@ import { PRIORITY_LABEL, STATUS_LABEL, isOpen } from '../shared/schemas.ts';
 import { NEXT_COUNT, nextReason } from '../shared/next.ts';
 import { isContainer, isFinishedSeries } from '../shared/series.ts';
 import { anchorLabel, flatten, offsetLabel } from '../shared/templates.ts';
-import type { Category, Memo, Note, Recurrence, Task, TaskDetail, Template, TodayView } from '../shared/types.ts';
+import { fmtAmount, goalRuleText, periodCounter, progressText } from '../shared/goals.ts';
+import type { Category, Goal, GoalDetail, Memo, Note, Recurrence, Task, TaskDetail, Template, TodayView } from '../shared/types.ts';
 
 const WEEKDAY = ['', '月', '火', '水', '木', '金', '土', '日'];
 
@@ -144,4 +145,32 @@ export function templateText(t: Template, cats: Map<number, Category>): string {
   });
   const order = deps.map(([after, before]) => `${titleOf.get(before)} → ${titleOf.get(after)}`);
   return [head, ...lines, ...(order.length ? [`依存（先 → 後）: ${order.join(' / ')}`] : [])].join('\n');
+}
+
+/** 目標の1行（design 4-13）: G-001 プール（週に2回・2026-10-19 から） 今週 1/2回 連続3週 達成 5/7週 累計 18回 */
+export function goalLine(g: Goal): string {
+  const p = g.progress;
+  const parts = [g.code, `${g.title}（${goalRuleText(g)}・${g.startDate} から${g.kind === 'rate' && g.endDate ? ` ${g.endDate} まで` : ''}）`];
+  parts.push(progressText(g, p));
+  if (g.kind === 'rate' && g.period && !p.notStarted) {
+    const c = periodCounter(g.period);
+    if (p.streak > 0) parts.push(`連続${p.streak}${c}`);
+    if (p.record.total > 0) parts.push(`達成 ${p.record.achieved}/${p.record.total}${c}`);
+    parts.push(`累計 ${fmtAmount(p.sum, g.unit)}`);
+  }
+  if (g.kind === 'total' && p.perDay !== null) parts.push(`残り${p.daysLeft}日・1日 ${fmtAmount(p.perDay, g.unit)}`);
+  if (p.todaySum > 0 && g.period !== 'day') parts.push(`今日 ${fmtAmount(p.todaySum, g.unit)}`);
+  if (g.archived) parts.push('（アーカイブ）');
+  return parts.join(' ');
+}
+
+/** 目標の詳細: 1行＋メモ＋記録（新しい順・limit 件まで） */
+export function goalDetailText(g: GoalDetail, limit = 30): string {
+  const logs = g.logs.slice(0, limit);
+  return [
+    goalLine(g),
+    ...(g.notes.trim() ? ['メモ:', ...g.notes.trim().split('\n').map((l) => `  ${l}`)] : []),
+    g.logs.length ? `記録（${g.logs.length}件${g.logs.length > limit ? `・新しい ${limit} 件` : ''}）:` : '記録: まだない',
+    ...logs.map((l) => `- ${l.date} ${fmtAmount(l.amount, g.unit)}${l.note ? ` ${l.note}` : ''}`),
+  ].join('\n');
 }

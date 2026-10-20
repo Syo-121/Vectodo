@@ -3,6 +3,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   DoDateInput,
+  GoalCreateInput,
+  GoalLogInput,
+  GoalPatchInput,
   MemoPatchInput,
   NoteCreateInput,
   NotePatchInput,
@@ -12,6 +15,8 @@ import type {
 } from '../shared/schemas.ts';
 import type {
   Category,
+  Goal,
+  GoalDetail,
   Memo,
   Note,
   NoteLabel,
@@ -120,7 +125,14 @@ export const api = {
   createNote: (input: NoteCreateInput) => req<Note>('POST', '/notes', input),
   updateNote: (id: number, patch: NotePatchInput) => req<Note>('PATCH', `/notes/${id}`, patch),
   deleteNote: (id: number) => req<{ ok: true }>('DELETE', `/notes/${id}`),
-  settings: () => req<AppSettings>('GET', '/settings'),
+  goals: (archived = false) => req<Goal[]>('GET', `/goals${archived ? '?archived=1' : ''}`),
+  goal: (id: number) => req<GoalDetail>('GET', `/goals/${id}`),
+  createGoal: (input: GoalCreateInput) => req<GoalDetail>('POST', '/goals', input),
+  updateGoal: (id: number, patch: GoalPatchInput) => req<GoalDetail>('PATCH', `/goals/${id}`, patch),
+  deleteGoal: (id: number) => req<{ ok: true }>('DELETE', `/goals/${id}`),
+  addGoalLog: (id: number, input: GoalLogInput) => req<GoalDetail>('POST', `/goals/${id}/logs`, input),
+  deleteGoalLog: (id: number, logId: number) => req<GoalDetail>('DELETE', `/goals/${id}/logs/${logId}`),
+  settings:() => req<AppSettings>('GET', '/settings'),
   updateSettings: (p: Partial<AppSettings>) => req<AppSettings>('PATCH', '/settings', p),
 };
 
@@ -167,6 +179,11 @@ export const useNoteLabels = () => useQuery({ queryKey: ['notes', 'labels'], que
 /** メモの書き込み（タスク化でタスク側も変わるので両方取り直す） */
 export const useMemoWrite = <A, R>(fn: (a: A) => Promise<R>, opts?: WriteOptions) =>
   useWrite(fn, [['memos'], ['tasks']], opts);
+/** 目標（design 3-6f・4-13）。書き込んだら goals を全部取り直す */
+export const useGoals = (archived = false) => useQuery({ queryKey: ['goals', archived], queryFn: () => api.goals(archived) });
+export const useGoal = (id: number | null) =>
+  useQuery({ queryKey: ['goals', 'detail', id], queryFn: () => api.goal(id!), enabled: id !== null });
+export const useGoalWrite = <A, R>(fn: (a: A) => Promise<R>) => useWrite(fn, [['goals']], { wait: false });
 
 export const useToday = () => useQuery({ queryKey: ['tasks', 'today'], queryFn: api.today });
 export const useInbox = () => useQuery({ queryKey: ['tasks', 'inbox'], queryFn: api.inbox });

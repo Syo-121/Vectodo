@@ -140,3 +140,41 @@ export const zNoteAppend = z.object({
   items: z.array(z.string().trim().min(1).max(2000)).max(100).optional(),
 });
 export type NoteAppendInput = z.infer<typeof zNoteAppend>;
+
+// 目標（design 3-6f・4-13）
+export const zGoalPeriod = z.enum(['day', 'week', 'month']);
+const zAmount = z.number().positive().max(1_000_000);
+const goalFields = {
+  title: z.string().trim().min(1, '名前は必須').max(200),
+  kind: z.enum(['rate', 'total']),
+  period: zGoalPeriod.nullable(),
+  target: zAmount,
+  unit: z.string().trim().max(20),
+  startDate: zDate,
+  endDate: zDate.nullable(),
+  notes: z.string().max(20_000),
+  position: z.number(),
+  archived: z.boolean(),
+};
+export const zGoalCreate = z.object({
+  title: goalFields.title,
+  kind: goalFields.kind,
+  period: goalFields.period.optional(),
+  target: goalFields.target,
+  unit: goalFields.unit.optional(),
+  /** 省くと、期間ごとなら今の期間の頭（今週の月曜・今月1日）、期限までなら今日 */
+  startDate: goalFields.startDate.optional(),
+  endDate: goalFields.endDate.optional(),
+  notes: goalFields.notes.optional(),
+});
+export type GoalCreateInput = z.infer<typeof zGoalCreate>;
+export const zGoalPatch = z.object(goalFields).partial();
+export type GoalPatchInput = z.infer<typeof zGoalPatch>;
+export const zGoalLogCreate = z.object({
+  /** 省くと今日 */
+  date: zDate.optional(),
+  /** 省くと 1 */
+  amount: zAmount.optional(),
+  note: z.string().trim().max(500).optional(),
+});
+export type GoalLogInput = z.infer<typeof zGoalLogCreate>;

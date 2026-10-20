@@ -1,10 +1,10 @@
 // 書き溜めて後で送る（design 7-9・要件 2-8 の第2段）。電波がない・PC が止まっているときの
-// クイックメモ・タスクの追加・ノートのチェックを端末（localStorage）に溜めて、つながったら順に送る。
+// クイックメモ・タスクの追加・ノートのチェック・目標の記録を端末（localStorage）に溜めて、つながったら順に送る。
 // ノートのチェックは「何番目の・どの文の項目を・付ける／外す」で溜め、送るときに今のノートを取り直して当てる
 // （溜めている間に Claude が項目を書き足していても上書きしない）。
 
 import { useSyncExternalStore } from 'react';
-import type { TaskCreateInput } from '../shared/schemas.ts';
+import type { GoalLogInput, TaskCreateInput } from '../shared/schemas.ts';
 import type { Note } from '../shared/types.ts';
 import { ApiError, api, isUnreachable } from './api.ts';
 import { isOffline } from './offline.ts';
@@ -12,7 +12,9 @@ import { isOffline } from './offline.ts';
 export type OutboxOp =
   | { kind: 'memo'; body: string }
   | { kind: 'task'; input: TaskCreateInput }
-  | { kind: 'noteCheck'; noteId: number; index: number; text: string; done: boolean };
+  | { kind: 'noteCheck'; noteId: number; index: number; text: string; done: boolean }
+  /** 目標の記録。日付は溜めた日を入れておく（送るのが翌日になっても、やった日のまま） */
+  | { kind: 'goalLog'; goalId: number; title: string; unit: string; input: GoalLogInput & { date: string } };
 
 export type OutboxEntry = OutboxOp & { id: string };
 
@@ -77,6 +79,7 @@ export function outboxLabel(e: OutboxOp): string {
   const cut = (s: string) => (s.length > 24 ? `${s.slice(0, 24)}…` : s);
   if (e.kind === 'memo') return `✎ メモ「${cut(e.body.replace(/\s+/g, ' '))}」`;
   if (e.kind === 'task') return `☑ タスク「${cut(e.input.title)}」`;
+  if (e.kind === 'goalLog') return `🎯 ${cut(e.title)} ＋${e.input.amount ?? 1}${e.unit}`;
   return `🗒 ${e.done ? 'チェック' : 'チェックを外す'}「${cut(e.text)}」`;
 }
 
@@ -114,6 +117,8 @@ async function send(e: OutboxOp): Promise<void> {
     await api.createMemo(e.body);
   } else if (e.kind === 'task') {
     await api.create(e.input);
+  } else if (e.kind === 'goalLog') {
+    await api.addGoalLog(e.goalId, e.input);
   } else {
     const n = (await liveNotes(false)).find((x) => x.id === e.noteId) ?? (await liveNotes(true)).find((x) => x.id === e.noteId);
     if (!n) throw new ApiError('ノートが消されていた', 404);

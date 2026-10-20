@@ -234,3 +234,73 @@ export interface NoteLabel {
   label: string;
   count: number;
 }
+
+/** 目標（design 3-6f・4-13）。rate＝期間ごとの量（週に2回・1日に10ページ）、total＝期限までの総量 */
+export type GoalPeriod = 'day' | 'week' | 'month';
+
+/** 1つの期間（1日・1週・1か月）の合計 */
+export interface GoalSpan {
+  from: string;
+  to: string;
+  sum: number;
+  achieved: boolean;
+}
+
+/** 進み具合（毎回計算する・shared/goals.ts の goalProgress） */
+export interface GoalProgress {
+  /** 今日の記録の合計 */
+  todaySum: number;
+  /** 数え始める日がまだ来ていない */
+  notStarted: boolean;
+  /** 終わる日（total は期限）を過ぎた */
+  ended: boolean;
+  /** rate: 今の期間（終わった・始まっていないなら null） */
+  current: GoalSpan | null;
+  /** rate: 最近の期間（古い順・今の期間まで） */
+  history: GoalSpan[];
+  /** rate: 続けて達成した期間の数（今の期間は達成していれば数える） */
+  streak: number;
+  /** rate: 終わった期間のうち達成した数 */
+  record: { achieved: number; total: number };
+  /** rate: 数え始めてからの累計／total: 数え始める日〜期限の合計 */
+  sum: number;
+  /** total: 今日までに済んでいたい量（日割り） */
+  expected: number | null;
+  /** total: 残りを1日あたりに（済んだ・期限を過ぎたら null） */
+  perDay: number | null;
+  /** total: 期限まで何日（今日を含む） */
+  daysLeft: number | null;
+}
+
+export interface Goal {
+  id: number;
+  /** G-001 */
+  code: string;
+  title: string;
+  kind: 'rate' | 'total';
+  period: GoalPeriod | null;
+  target: number;
+  unit: string;
+  startDate: string;
+  endDate: string | null;
+  notes: string;
+  position: number;
+  archived: boolean;
+  createdAt: string;
+  updatedAt: string;
+  progress: GoalProgress;
+}
+
+export interface GoalLog {
+  id: number;
+  goalId: number;
+  date: string;
+  amount: number;
+  note: string;
+  createdAt: string;
+}
+
+export interface GoalDetail extends Goal {
+  /** 記録（新しい順） */
+  logs: GoalLog[];
+}

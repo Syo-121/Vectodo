@@ -31,7 +31,8 @@ export function createApp(s: Services, opts: AppOptions): Hono {
     await next();
     // 書き込んだら Google カレンダーへの同期を予約する（少し待ってまとめて送る・design 4-7）
     const p = c.req.path;
-    const write = p === '/mcp' || (p.startsWith('/api/') && !p.startsWith('/api/gcal/'));
+    // 目標はカレンダーに出ないので数えない
+    const write = p === '/mcp' || (p.startsWith('/api/') && !p.startsWith('/api/gcal/') && !p.startsWith('/api/goals'));
     if (s.gcal && write && c.req.method !== 'GET' && c.res.status < 400) s.gcal.kick();
   });
 

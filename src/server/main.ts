@@ -11,6 +11,7 @@ import { loadConfig, PROJECT_ROOT } from './config.ts';
 import { openDb } from './db.ts';
 import { GoogleClient } from './gcal/google.ts';
 import { GcalSync } from './gcal/sync.ts';
+import { GoalService } from './goals.ts';
 import { MemoService } from './memos.ts';
 import { NoteService } from './notes.ts';
 import { SettingsService } from './settings.ts';
@@ -40,6 +41,7 @@ const services: Services = {
   memos: new MemoService(db, clock, tasks),
   notes: new NoteService(db, clock),
   templates: new TemplateService(db, clock, tasks),
+  goals: new GoalService(db, clock),
   gcal,
 };
 
