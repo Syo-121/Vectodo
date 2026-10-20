@@ -5,6 +5,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
 import { Layout } from './components/Layout.tsx';
 import './index.css';
 import { BoardPage } from './pages/BoardPage.tsx';
+import { GoalDetailPage } from './pages/GoalDetailPage.tsx';
 import { GoalsPage } from './pages/GoalsPage.tsx';
 import { InboxPage } from './pages/InboxPage.tsx';
 import { ListPage } from './pages/ListPage.tsx';
@@ -37,6 +38,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/inbox" element={<InboxPage />} />
             <Route path="/notes" element={<NotesPage />} />
             <Route path="/goals" element={<GoalsPage />} />
+            <Route path="/goals/:id" element={<GoalDetailPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/today" replace />} />
           </Route>
