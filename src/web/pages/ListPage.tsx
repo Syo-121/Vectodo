@@ -1,4 +1,4 @@
-// 一覧（design 7-4）: カテゴリ別の木（既定）／締切順。検索・絞り込み（7-10）・完了も表示。
+// 一覧（design 7-4）: カテゴリ別の木（既定）／締切順／追加順。検索・絞り込み（7-10）・完了も表示。
 // カテゴリの「先の分を隠す」（4-9）が効く。検索しているときは全部出す。
 
 import { useEffect, useState } from 'react';
@@ -12,7 +12,7 @@ import { TaskRow } from '../components/TaskRow.tsx';
 import { applyFilter, EMPTY_FILTER, normalizeFilter, type TaskFilter } from '../filter.ts';
 import { splitFar } from '../horizon.ts';
 import { useLocalState } from '../storage.ts';
-import { clientToday, cx } from '../util.ts';
+import { clientToday, cx, fmtDate } from '../util.ts';
 
 export function ListPage() {
   const [q, setQ] = useState('');
@@ -21,7 +21,7 @@ export function ListPage() {
     const h = setTimeout(() => setDebounced(q.trim()), 250);
     return () => clearTimeout(h);
   }, [q]);
-  const [mode, setMode] = useLocalState<'category' | 'due'>('list.mode', 'category');
+  const [mode, setMode] = useLocalState<'category' | 'due' | 'created'>('list.mode', 'category');
   const [includeDone, setIncludeDone] = useLocalState('list.includeDone', false);
   const [collapsed, setCollapsed] = useLocalState<number[]>('list.collapsed', []);
   const [includeArchived, setIncludeArchived] = useLocalState('list.includeArchived', false);
@@ -60,6 +60,9 @@ export function ListPage() {
         </button>
         <button type="button" className={btn(mode === 'due')} onClick={() => setMode('due')}>
           締切順
+        </button>
+        <button type="button" className={btn(mode === 'created')} onClick={() => setMode('created')}>
+          追加順
         </button>
         <button type="button" className={btn(includeDone)} onClick={() => setIncludeDone(!includeDone)}>
           完了も
@@ -106,6 +109,8 @@ export function ListPage() {
             <TaskRow key={t.id} task={t} today={today} categories={categories} showParent />
           ))}
         </Section>
+      ) : mode === 'created' ? (
+        <CreatedList tasks={tasks} categories={categories} today={today} />
       ) : (
         <CategoryTree tasks={tasks} cats={cats} categories={categories} today={today} collapsed={collapsed} toggle={toggle} />
       )}
@@ -120,6 +125,33 @@ function byDue(a: Task, b: Task): number {
     firstDo(a).localeCompare(firstDo(b)) ||
     (a.priority ?? 9) - (b.priority ?? 9) ||
     a.id - b.id
+  );
+}
+
+/** 追加した日ごとに、新しく追加したものから（2026-10-20 本人要望・design 7-4）。追加日時は JST（+09:00）で持っている */
+function CreatedList({ tasks, categories, today }: { tasks: Task[]; categories: Map<number, Category>; today: string }) {
+  const days = new Map<string, Task[]>();
+  for (const t of [...tasks].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id)) {
+    const d = t.createdAt.slice(0, 10);
+    days.set(d, [...(days.get(d) ?? []), t]);
+  }
+  return (
+    <>
+      {[...days].map(([d, list]) => (
+        <Section key={d} title={`${fmtDate(d, today)}に追加`} count={list.length}>
+          {list.map((t) => (
+            <TaskRow
+              key={t.id}
+              task={t}
+              today={today}
+              categories={categories}
+              showParent
+              note={<div className="mt-0.5 text-xs text-zinc-400">{t.createdAt.slice(11, 16)} に追加</div>}
+            />
+          ))}
+        </Section>
+      ))}
+    </>
   );
 }
 
