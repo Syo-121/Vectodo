@@ -45,8 +45,10 @@ export interface Task {
   doDates: { date: string; minutes: number | null; start?: string | null }[];
   /** 先にやるタスク（完了・中止済みも含む） */
   dependsOn: TaskRef[];
-  /** 依存先に未完了が残っている（＝依存待ち） */
+  /** 依存先に未完了が残っている、または祖先が依存待ち・待ち（＝依存待ち・design 4-2） */
   blocked: boolean;
+  /** 祖先（親・その上）が依存待ちか「待ち」で手を付けられないとき、自分で待っている祖先のうちいちばん近いもの（＝待たせている元） */
+  waitVia?: TaskRef;
   /** 子の進み具合（中止は数えない） */
   children: { total: number; done: number };
   /** 締切が親から受け継いだものなら、その親（行動の画面で計算する印・API は返さない・design 4-3） */
