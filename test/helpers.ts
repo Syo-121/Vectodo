@@ -1,5 +1,6 @@
 import { CategoryService } from '../src/server/categories.ts';
 import { openDb } from '../src/server/db.ts';
+import { GoalService } from '../src/server/goals.ts';
 import { MemoService } from '../src/server/memos.ts';
 import { NoteService } from '../src/server/notes.ts';
 import { SettingsService } from '../src/server/settings.ts';
@@ -28,5 +29,6 @@ export function setup(today = '2026-10-13') {
     memos: new MemoService(db, clock, tasks),
     notes: new NoteService(db, clock),
     templates: new TemplateService(db, clock, tasks),
+    goals: new GoalService(db, clock),
   };
 }

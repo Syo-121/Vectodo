@@ -11,7 +11,7 @@ import { nextSteps } from '../shared/series.ts';
 import type { Category } from '../shared/types.ts';
 import type { Services } from './api.ts';
 import { AppError, badRequest } from './errors.ts';
-import { memoText, noteText, taskDetailText, taskLine, templateText, todayText } from './format.ts';
+import { goalDetailText, goalLine, memoText, noteText, taskDetailText, taskLine, templateText, todayText } from './format.ts';
 
 const zRef = z.union([z.number(), z.string()]).describe('タスク番号（例: "T-130"・"130"・130）');
 const zCategoryRef = z
@@ -460,6 +460,88 @@ export function createMcpServer(s: Services): McpServer {
       },
     },
     safe(({ id, text: t, items }) => text(`書き足した:\n${noteText(s.notes.append(noteRef(id), { text: t, items }))}`)),
+  );
+
+  // ── 目標（design 3-6f・4-13）。読む・作る・記録を足すだけ。⛔ 書き換え・記録の削除は持たせない（画面から）
+  const zGoalRef = z.union([z.number(), z.string()]).describe('目標の番号（例: "G-001"・"1"）か名前。list_goals で確認');
+
+  server.registerTool(
+    'list_goals',
+    {
+      description:
+        '目標の一覧と進み具合（例: 週に2回・1日に10ページ・12/31 までに 300ページ）。期間ごとの目標は今の期間の合計・連続達成・終わった期間のうち達成した数・累計、期限までの目標は合計・ペース（予定より遅れ／先）・残りを1日あたりに。',
+      inputSchema: { archived: z.boolean().optional().describe('true でアーカイブした目標') },
+      annotations: { readOnlyHint: true },
+    },
+    safe(({ archived }) => {
+      const list = s.goals.list({ archived });
+      return text(list.length ? list.map(goalLine).join('\n') : '（目標なし）');
+    }),
+  );
+
+  server.registerTool(
+    'get_goal',
+    {
+      description: '目標1つの進み具合・メモ・記録（新しい順。日付・量・一言）。',
+      inputSchema: {
+        goal: zGoalRef,
+        limit: z.number().int().positive().max(500).optional().describe('記録を何件まで出すか（既定 30）'),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    safe(({ goal, limit }) => text(goalDetailText(s.goals.get(s.goals.resolve(goal)), limit))),
+  );
+
+  server.registerTool(
+    'add_goal',
+    {
+      description:
+        '目標を作る。kind=rate は「期間ごとに target（unit）」（period=day・week〈月曜はじまり〉・month）、kind=total は「end_date までに target（unit）」。本人と中身を決めてから使う。',
+      inputSchema: {
+        title: z.string().trim().min(1).max(200).describe('名前（例: "プール"・"回路の本を読む"）'),
+        kind: z.enum(['rate', 'total']),
+        period: z.enum(['day', 'week', 'month']).optional().describe('rate のとき'),
+        target: z.number().positive().describe('目標の量'),
+        unit: z.string().trim().max(20).optional().describe('単位（既定 "回"。例: "ページ"・"分"）'),
+        start_date: zDate.optional().describe('数え始める日（省くと rate は今の期間の頭、total は今日）'),
+        end_date: zDate.optional().describe('total は期限（必須）。rate は終わる日（省くとずっと）'),
+        notes: z.string().max(20_000).optional().describe('メモ（本の名前・ルールなど）'),
+      },
+    },
+    safe((a) =>
+      text(
+        `作った:\n${goalDetailText(
+          s.goals.create({
+            title: a.title,
+            kind: a.kind,
+            period: a.period,
+            target: a.target,
+            unit: a.unit,
+            startDate: a.start_date,
+            endDate: a.end_date,
+            notes: a.notes,
+          }),
+        )}`,
+      ),
+    ),
+  );
+
+  server.registerTool(
+    'log_goal',
+    {
+      description:
+        '目標に記録を足す（例: 「プール行った」→ amount 1、「10ページ読んだ」→ amount 10）。date を省くと今日。先の日付と、数え始める日より前は記録できない。間違えた記録を消す・直すのは本人が画面で。',
+      inputSchema: {
+        goal: zGoalRef,
+        amount: z.number().positive().optional().describe('量（省くと 1）'),
+        date: zDate.optional().describe('やった日 YYYY-MM-DD（省くと今日）'),
+        note: z.string().trim().max(500).optional().describe('一言（例: "90分"・"3章まで"）'),
+      },
+    },
+    safe(({ goal, amount, date, note }) => {
+      const g = s.goals.addLog(s.goals.resolve(goal), { amount, date, note });
+      return text(`記録した:\n${goalLine(g)}`);
+    }),
   );
 
   // ── テンプレート（design 4-8）。⛔ 削除は持たせない（画面の設定から）

@@ -28,6 +28,15 @@ export function parseNoteRef(ref: string | number): number | null {
   return parseRef(ref, 'n');
 }
 
+/** 目標の番号（G-001…）。規則はタスクと同じ */
+export function formatGoalCode(id: number): string {
+  return `G-${String(id).padStart(3, '0')}`;
+}
+
+export function parseGoalRef(ref: string | number): number | null {
+  return parseRef(ref, 'g');
+}
+
 function parseRef(ref: string | number, prefix: string): number | null {
   if (typeof ref === 'number') return Number.isSafeInteger(ref) && ref > 0 ? ref : null;
   const m = new RegExp(`^\\s*(?:${prefix}-?)?(\\d+)\\s*$`, 'i').exec(ref);
