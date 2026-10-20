@@ -3,8 +3,10 @@
 // 「締切が迫る」は /task スキルの緊急度と同じ: 締切までの日数 − 必要な日数（見積 ÷ 2h を切り上げ・見積なしは1日）≦ 2。
 // ただし見積 30m 以下の小さいタスク（ゴミ出しなど）は ≦ 0＝締切の前日から。
 // 着手できないもの（待ち・依存待ち）は入れない。子が残っている親は入れず、その段を着手できる子に受け継がせる。
+// 子が全部終わった親も入れない（締切かやる日があれば今日の「閉じる？」に出す・design 4-3）。
 
 import { diffDays, maxDate } from './dates.ts';
+import { canStart, isContainer, isFinishedSeries } from './series.ts';
 import type { NextItem, NextKind, Task } from './types.ts';
 
 export const NEXT_ORDER: NextKind[] = ['overdue', 'dueToday', 'doing', 'doToday', 'atRisk', 'dueSoon', 'important'];
@@ -23,10 +25,6 @@ export function slackLimit(estimateMin: number | null): number {
 }
 
 const isOpen = (t: Task) => t.status === 'todo' || t.status === 'doing' || t.status === 'waiting';
-/** 子が残っている親（中身は子のほう） */
-const isContainer = (t: Task) => t.children.total > t.children.done;
-/** 今すぐ手を付けられる */
-const canStart = (t: Task) => (t.status === 'todo' || t.status === 'doing') && !t.blocked;
 
 export function plannedToday(t: Task, today: string): boolean {
   return t.doDates.some((d) => d.date === today);
@@ -111,6 +109,7 @@ export function rankNext(tasks: Task[], today: string): NextItem[] {
   });
 
   for (const t of open) {
+    if (isFinishedSeries(t)) continue;
     const c = classify(t, today);
     if (!c) continue;
     if (isContainer(t)) {

@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { parseMemoRef, parseNoteRef, parseTaskRef } from '../shared/ids.ts';
 import { zDate, zMemoBody, zPriority, zStatus, zTime } from '../shared/schemas.ts';
 import { NOTE_COLORS } from '../shared/constants.ts';
+import { nextSteps } from '../shared/series.ts';
 import type { Category } from '../shared/types.ts';
 import type { Services } from './api.ts';
 import { AppError, badRequest } from './errors.ts';
@@ -84,7 +85,7 @@ export function createMcpServer(s: Services): McpServer {
     'list_tasks',
     {
       description:
-        'タスクの一覧。view=today は「期限切れ・今日やる（持ち越し含む）・締切間近7日・今日完了」、all は未完了の全件（include_done で完了・中止も）、inbox はタイトルだけで入った未整理のもの。',
+        'タスクの一覧。view=today は「次にやること・期限切れ・今日やる（持ち越し含む）・締切間近7日・シリーズの締切・子が全部終わった親（閉じる？）・今日完了」、all は未完了の全件（include_done で完了・中止も）、inbox はタイトルだけで入った未整理のもの。子が残っている親は「シリーズ 0/7 次:T-155」（次＝いま着手できる子）と出る——親はまとめ役で、やることは子のほう。',
       inputSchema: {
         view: z.enum(['today', 'all', 'inbox']).default('today'),
         category: zCategoryRef.optional(),
@@ -113,7 +114,14 @@ export function createMcpServer(s: Services): McpServer {
               doneSince: done_since,
               includeArchived: include_archived,
             });
-      return text(list.length ? list.map((t) => taskLine(t, c)).join('\n') : '（該当なし）');
+      // 親の「次:」は、絞り込みで子が抜けないよう未完了の全件から求める
+      const steps = new Map(
+        [...nextSteps(view === 'all' ? s.tasks.all({ includeArchived: true }) : list)].map(([id, ts]) => [
+          id,
+          ts.map((t) => t.code),
+        ]),
+      );
+      return text(list.length ? list.map((t) => taskLine(t, c, steps)).join('\n') : '（該当なし）');
     }),
   );
 

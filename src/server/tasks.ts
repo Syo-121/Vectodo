@@ -13,6 +13,7 @@ import {
 } from '../shared/schemas.ts';
 import { TOP_SERIES_TITLE } from '../shared/constants.ts';
 import { rankNext, waitingSoon } from '../shared/next.ts';
+import { askToClose, isContainer, isFinishedSeries, nextSteps } from '../shared/series.ts';
 import type {
   Recurrence,
   SeriesGraph,
@@ -173,8 +174,18 @@ export class TaskService {
       placed: open
         .filter((t) => t.doDates.some((d) => d.date === today && d.start))
         .sort((a, b) => startOn(a, today).localeCompare(startOn(b, today)) || a.id - b.id),
+      closable: open.filter(askToClose).sort(byUrgency),
+      seriesDue: [],
+      steps: {},
     };
+    // 子が残っている親は「まとめ役」なので、期限切れ・今日やる・締切間近には入れず、締切が近ければ「シリーズの締切」へ。
+    // 子が全部終わった親は「閉じる？」（closable）に出す（design 4-3）
     for (const t of tasks) {
+      if (isFinishedSeries(t)) continue;
+      if (isContainer(t)) {
+        if (t.dueDate && t.dueDate <= soon) view.seriesDue.push(t);
+        continue;
+      }
       const dates = t.doDates.map((d) => d.date);
       const hasToday = dates.includes(today);
       const carried = !hasToday && dates.length > 0 && maxDate(dates)! < today;
@@ -185,6 +196,9 @@ export class TaskService {
     view.overdue.sort(byUrgency);
     view.todo.sort(byUrgency);
     view.dueSoon.sort(byUrgency);
+    view.seriesDue.sort(byUrgency);
+    const steps = nextSteps(open);
+    for (const t of view.seriesDue) view.steps[t.id] = (steps.get(t.id) ?? []).map((c) => c.code);
     view.doneToday = this.hydrate(
       this.rows(
         `SELECT t.* FROM tasks t WHERE t.status = 'done' AND substr(t.completed_at, 1, 10) = ? AND ${NOT_ARCHIVED_SQL}

@@ -3,6 +3,7 @@
 import { formatTaskCode } from '../shared/ids.ts';
 import { PRIORITY_LABEL, STATUS_LABEL, isOpen } from '../shared/schemas.ts';
 import { NEXT_COUNT, nextReason } from '../shared/next.ts';
+import { isContainer, isFinishedSeries } from '../shared/series.ts';
 import { anchorLabel, flatten, offsetLabel } from '../shared/templates.ts';
 import type { Category, Memo, Note, Recurrence, Task, TaskDetail, Template, TodayView } from '../shared/types.ts';
 
@@ -25,7 +26,11 @@ export function recurrenceText(r: Recurrence): string {
   return `${base}（${r.anchor === 'do' ? 'やる日' : '締切'}基準${r.active ? '' : '・停止中'}）`;
 }
 
-export function taskLine(t: Task, cats: Map<number, Category>): string {
+/**
+ * 1件1行。子が残っている親は「シリーズ 0/7」（steps を渡すと「次:T-155」＝いま着手できる子も・無ければ「次:なし」）、
+ * 子が全部終わった親は「子3/3 全部済」（design 4-3）
+ */
+export function taskLine(t: Task, cats: Map<number, Category>, steps?: Map<number, string[]>): string {
   const parts = [t.code];
   if (t.categoryId !== null) parts.push(`[${cats.get(t.categoryId)?.name ?? `#${t.categoryId}`}]`);
   parts.push(t.title);
@@ -41,7 +46,13 @@ export function taskLine(t: Task, cats: Map<number, Category>): string {
   parts.push(STATUS_LABEL[t.status]);
   const waitingOn = t.dependsOn.filter((d) => isOpen(d.status));
   if (waitingOn.length) parts.push(`依存待ち:${waitingOn.map((d) => d.code).join(',')}`);
-  if (t.children.total) parts.push(`子${t.children.done}/${t.children.total}`);
+  if (isContainer(t)) {
+    parts.push(`シリーズ${t.children.done}/${t.children.total}`);
+    const next = steps?.get(t.id);
+    if (next) parts.push(`次:${next.length ? next.join(',') : 'なし'}`);
+  } else if (t.children.total) {
+    parts.push(`子${t.children.done}/${t.children.total}${isFinishedSeries(t) ? ' 全部済' : ''}`);
+  }
   if (t.parentId !== null) parts.push(`親:${formatTaskCode(t.parentId)}`);
   if (t.recurrence) parts.push('🔁');
   return parts.join(' ');
@@ -91,6 +102,7 @@ export function todayText(v: TodayView, cats: Map<number, Category>): string {
   const section = (title: string, tasks: Task[], mark?: (t: Task) => string) =>
     tasks.length ? [`## ${title}（${tasks.length}）`, ...tasks.map((t) => `- ${mark?.(t) ?? ''}${taskLine(t, cats)}`)] : [];
   const next = v.ranked.slice(0, NEXT_COUNT);
+  const steps = new Map(Object.entries(v.steps).map(([id, codes]) => [Number(id), codes]));
   return [
     `今日: ${v.today}`,
     ...(next.length
@@ -99,6 +111,13 @@ export function todayText(v: TodayView, cats: Map<number, Category>): string {
     ...section('期限切れ', v.overdue),
     ...section('今日やる', v.todo, (t) => ((t as Task & { carriedOver: boolean }).carriedOver ? '〔持ち越し〕' : '')),
     ...section('締切間近（7日以内）', v.dueSoon),
+    ...(v.seriesDue.length
+      ? [
+          `## シリーズの締切（7日以内・過ぎたものも）（${v.seriesDue.length}）`,
+          ...v.seriesDue.map((t) => `- ${taskLine(t, cats, steps)}`),
+        ]
+      : []),
+    ...section('子が全部終わった（閉じる？）', v.closable),
     ...section('今日完了', v.doneToday),
   ].join('\n');
 }
