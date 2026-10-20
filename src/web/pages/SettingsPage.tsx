@@ -8,6 +8,7 @@ import type { Category, Template } from '../../shared/types.ts';
 import { api, useCategories, useCategoryWrite, useSettings, useTemplates, useTemplateWrite, useWrite, type AppSettings } from '../api.ts';
 import { PageHeader } from '../components/Layout.tsx';
 import { ADD_AFTER, useAddAfter } from '../addAfter.ts';
+import { BUILD, fmtBuild, updateApp, useLatestBuild } from '../appVersion.ts';
 import { NOTE_FONTS, noteFontPx, useNoteFont } from '../noteFont.ts';
 import { setThemePref, useThemePref, type ThemePref } from '../theme.ts';
 import { toast } from '../toast.ts';
@@ -83,6 +84,9 @@ export function SettingsPage() {
       <h2 className={H2}>表示</h2>
       <ThemeSetting />
       <NoteFontSetting />
+
+      <h2 className={H2}>アプリ</h2>
+      <AppVersionSetting />
     </div>
   );
 }
@@ -372,6 +376,50 @@ function ThemeSetting() {
         ))}
       </div>
       <p className="mt-2.5 text-xs text-zinc-400">この端末だけの設定（スマホと PC で別々に選べる）。</p>
+    </div>
+  );
+}
+
+/** 画面の版と更新（design 7-9）。ホーム画面のアプリには再読み込みのボタンが無いので、ここから入れ替える */
+function AppVersionSetting() {
+  const { latest, checked, hasUpdate } = useLatestBuild();
+  const [busy, setBusy] = useState(false);
+  const run = () => {
+    setBusy(true);
+    void updateApp().then((ok) => {
+      if (!ok) {
+        setBusy(false);
+        toast('つながっていないので更新できない', 'error');
+      }
+    });
+  };
+  return (
+    <div className={cx(CARD, 'p-4')}>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+        <dt className="text-zinc-500">この画面</dt>
+        <dd>{fmtBuild(BUILD)} の版</dd>
+        <dt className="text-zinc-500">最新</dt>
+        <dd className={cx(hasUpdate && 'font-medium text-indigo-600 dark:text-indigo-400')}>
+          {!checked
+            ? '確かめている…'
+            : latest === null
+              ? '確かめられない（つながっていない）'
+              : hasUpdate
+                ? `${fmtBuild(latest)} の版（新しい版がある）`
+                : '最新の版を使っている'}
+        </dd>
+      </dl>
+      <button
+        type="button"
+        onClick={run}
+        disabled={busy || (checked && latest === null)}
+        className="mt-3 rounded-md bg-indigo-600 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+      >
+        {busy ? '更新中…' : '更新して読み込み直す'}
+      </button>
+      <p className="mt-2.5 text-xs leading-relaxed text-zinc-400">
+        ホーム画面に置いたアプリは、開き直しても前の画面のまま続くことがある。新しい版が出ると上に帯が出るので、そこかここで入れ替える。データと端末の設定はそのまま残る。
+      </p>
     </div>
   );
 }

@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { serveStatic } from '@hono/node-server/serve-static';
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { createApi, type Services } from './api.ts';
 import { handleMcp } from './mcp.ts';
 
@@ -55,9 +55,13 @@ export function createApp(s: Services, opts: AppOptions): Hono {
   const webRoot = opts.webRoot;
   if (webRoot && fs.existsSync(path.join(webRoot, 'index.html'))) {
     const rel = path.relative(process.cwd(), webRoot);
-    app.use('/*', serveStatic({ root: rel }));
+    // 名前にハッシュが付く /assets は長く持たせ、版が変わるもの（index.html・sw.js・manifest・version.json・アイコン）は
+    // 毎回サーバに確かめさせる（端末に古い画面が残らないように・design 7-9）
+    const cache = (p: string, c: Context) =>
+      void c.header('Cache-Control', p.includes('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache');
+    app.use('/*', serveStatic({ root: rel, onFound: cache }));
     // 画面内のパス（/inbox など）は index.html を返して画面側のルーターに任せる
-    app.get('*', serveStatic({ root: rel, path: 'index.html' }));
+    app.get('*', serveStatic({ root: rel, path: 'index.html', onFound: cache }));
   }
   return app;
 }

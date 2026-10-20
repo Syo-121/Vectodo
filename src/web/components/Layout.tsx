@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { useCategories, useInbox, useMemos } from '../api.ts';
+import { updateApp, useLatestBuild } from '../appVersion.ts';
 import { useWideScreen } from '../media.ts';
 import { fmtSaved, useOffline } from '../offline.ts';
 import { flushOutbox, outboxLabel, useOutbox } from '../outbox.ts';
@@ -91,6 +92,7 @@ export function Layout() {
       </nav>
 
       <OfflineBanner />
+      <UpdateBanner />
 
       {/* 2列のときは右の詳細が画面の高さぴったりなので、下の余白を足さない（足すと要らないスクロールが出る） */}
       {/* スマホは最後の行が右下の＋ボタンに隠れないだけ余白を取る */}
@@ -231,6 +233,42 @@ function OfflineBanner() {
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+/**
+ * 新しい版の画面が出ているとき（design 7-9）。ホーム画面のアプリは読み込み直さないので、戻ってきたときに知らせて
+ * ［更新］で入れ替える。「あとで」はその版のあいだ出さない（次の版が出たらまた出す）
+ */
+function UpdateBanner() {
+  const { latest, hasUpdate } = useLatestBuild();
+  const [dismissed, setDismissed] = useLocalState<string | null>('update.dismissed', null);
+  const [busy, setBusy] = useState(false);
+  if (!hasUpdate || latest === dismissed) return null;
+  const run = () => {
+    setBusy(true);
+    void updateApp().then((ok) => {
+      if (!ok) {
+        setBusy(false);
+        toast('つながっていないので更新できない', 'error');
+      }
+    });
+  };
+  return (
+    <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-indigo-200 bg-indigo-50 px-4 py-2 text-sm text-indigo-900 md:top-[49px] dark:border-indigo-900 dark:bg-indigo-950 dark:text-indigo-200">
+      <span className="min-w-0">✨ 新しい版がある</span>
+      <button type="button" onClick={() => setDismissed(latest)} className="ml-auto shrink-0 px-2 py-0.5 text-xs opacity-70">
+        あとで
+      </button>
+      <button
+        type="button"
+        onClick={run}
+        disabled={busy}
+        className="shrink-0 rounded-md bg-indigo-600 px-3 py-1 text-xs text-white disabled:opacity-60"
+      >
+        {busy ? '更新中…' : '更新'}
+      </button>
     </div>
   );
 }
