@@ -1,4 +1,5 @@
-// 即追加（design 7-2・7-5）。「タスク／メモ／テンプレ」を切り替えられ、保存してもシートは開いたまま（続けて入れられる）。
+// 即追加（design 7-2・7-5）。「タスク／メモ／テンプレ」を切り替えられる。タスクとメモは、保存したあと開いたまま続けて入れるか、
+// 1件で閉じるかを設定で選ぶ（端末ごと・addAfter.ts。閉じるのは保存できたときだけ＝失敗したら書いたものが残る）。
 // タスク: Enter で保存。何も選ばなければ受信箱に入る。
 // メモ: Enter は改行、Ctrl＋Enter（⌘＋Enter）か「保存」で保存。受信箱に入り、あとで AI が記録やタスクへ振り分ける。
 // テンプレ: テンプレートを選び、基準日とタイトルを入れて親・子・依存をまとめて作る（design 4-8）。作ったらシートは閉じる。
@@ -7,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import { anchorLabel, defaultTitle, flatten, offsetLabel } from '../../shared/templates.ts';
 import type { Category, Template } from '../../shared/types.ts';
 import type { TaskCreateInput } from '../../shared/schemas.ts';
+import { useAddAfter } from '../addAfter.ts';
 import { api, useMemoWrite, useTemplates, useWrite } from '../api.ts';
 import { useOpenTask } from '../nav.ts';
 import { sendOrQueue } from '../outbox.ts';
@@ -69,6 +71,7 @@ function TaskForm({ categories, onClose }: { categories: Category[]; onClose: ()
   const [priority, setPriority] = useState<1 | 2 | 3 | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const openTask = useOpenTask();
+  const [after] = useAddAfter();
   // つながらなければ端末に溜めて、つながったら送る（outbox.ts）
   const create = useWrite((input: TaskCreateInput) => sendOrQueue({ kind: 'task', input }, () => api.create(input)));
 
@@ -89,6 +92,7 @@ function TaskForm({ categories, onClose }: { categories: Category[]; onClose: ()
           setTitle('');
           if (!task) toast('つながっていないので溜めた（つながったら追加する）');
           else toast(`${task.code} を追加`, 'info', { label: '開く', run: () => openTask(task.id) });
+          if (after === 'close') onClose();
         },
       },
     );
@@ -158,7 +162,10 @@ function TaskForm({ categories, onClose }: { categories: Category[]; onClose: ()
         </select>
         <Buttons onClose={onClose} onSubmit={submit} disabled={!title.trim()} label="追加" />
       </div>
-      <p className="mt-2 text-xs text-zinc-400">何も選ばなければ受信箱に入る。続けて何件でも入れられる。</p>
+      <p className="mt-2 text-xs text-zinc-400">
+        何も選ばなければ受信箱に入る。
+        {after === 'close' ? '1件入れたら閉じる（設定で切り替えられる）。' : '続けて何件でも入れられる。'}
+      </p>
     </>
   );
 }
@@ -166,6 +173,7 @@ function TaskForm({ categories, onClose }: { categories: Category[]; onClose: ()
 function MemoForm({ onClose }: { onClose: () => void }) {
   const [body, setBody] = useState('');
   const area = useRef<HTMLTextAreaElement>(null);
+  const [after] = useAddAfter();
   const create = useMemoWrite((b: string) => sendOrQueue({ kind: 'memo', body: b }, () => api.createMemo(b)));
 
   useEffect(() => area.current?.focus(), []);
@@ -177,6 +185,7 @@ function MemoForm({ onClose }: { onClose: () => void }) {
       onSuccess: (m) => {
         setBody('');
         toast(m ? `メモを保存（${m.code}）` : 'つながっていないので溜めた（つながったら送る）');
+        if (after === 'close') onClose();
       },
     });
     area.current?.focus();
