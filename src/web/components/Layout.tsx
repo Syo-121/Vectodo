@@ -22,6 +22,7 @@ const TABS = [
   { to: '/list', label: '一覧', icon: '☰' },
   { to: '/inbox', label: '受信箱', icon: '📥' },
   { to: '/notes', label: 'ノート', icon: '🗒' },
+  { to: '/goals', label: '目標', icon: '🎯' },
   { to: '/settings', label: '設定', icon: '⚙︎' },
 ];
 
@@ -39,7 +40,7 @@ export function Layout() {
   // 今日の流れの「置く」パネルが右の欄を借りている間は、詳細を隠す
   const sideBusy = useSidePanelActive();
   // 広い画面の今日・一覧・未整理は「左に一覧、右に詳細」。ボードは幅いっぱい使うので詳細は重ねて出す
-  const split = wideScreen && !path.startsWith('/board') && !path.startsWith('/settings') && !path.startsWith('/notes');
+  const split = wideScreen && !path.startsWith('/board') && !path.startsWith('/settings') && !path.startsWith('/notes') && !path.startsWith('/goals');
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -176,7 +177,7 @@ export function Layout() {
 
 /**
  * つながっていないとき・送信待ちがあるときの帯。つながっていない間は端末に残しておいた中身を見せていて、
- * メモ・タスクの追加・ノートのチェックは端末に溜める（outbox.ts）。20秒ごと・電波が戻った合図・ボタンで、
+ * メモ・タスクの追加・ノートのチェック・目標の記録は端末に溜める（outbox.ts）。20秒ごと・電波が戻った合図・ボタンで、
  * つながったか確かめて（印のない返事が来たら帯が消える）溜めたものを送る
  */
 function OfflineBanner() {
@@ -226,7 +227,7 @@ function OfflineBanner() {
           {off ? 'つなぎ直す' : '今すぐ送る'}
         </button>
       </div>
-      {off && <p className="mt-0.5 text-xs opacity-80">メモ・タスクの追加とノートのチェックは溜めて、つながったら送る</p>}
+      {off && <p className="mt-0.5 text-xs opacity-80">メモ・タスクの追加・ノートのチェック・目標の記録は溜めて、つながったら送る</p>}
       {open && pending.length > 0 && (
         <ul className="mt-1 space-y-0.5 text-xs">
           {pending.map((e) => (

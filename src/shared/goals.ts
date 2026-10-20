@@ -76,7 +76,8 @@ export function goalProgress(g: GoalRule, logs: { date: string; amount: number }
       sum,
       expected: round((g.target * elapsed) / days),
       daysLeft,
-      perDay: daysLeft > 0 && remaining > 0 ? round(remaining / Math.min(daysLeft, days)) : null,
+      // 1日あたりは切り上げ（これだけやれば間に合う量。10 以上は整数・それより小さければ小数第1位まで）
+      perDay: daysLeft > 0 && remaining > 0 ? ceilApprox(remaining / Math.min(daysLeft, days)) : null,
     };
   }
 
@@ -163,7 +164,16 @@ export function progressText(g: GoalRule, p: GoalProgress): string {
 
 /** total のペース: 予定どおり・予定より 20 遅れ・予定より 5 先 */
 export function paceText(p: GoalProgress): string {
-  const diff = round(p.sum - (p.expected ?? 0));
+  const diff = p.sum - (p.expected ?? 0);
   if (Math.abs(diff) < 0.5) return '予定どおり';
-  return diff < 0 ? `予定より ${round(-diff)} 遅れ` : `予定より ${diff} 先`;
+  return diff < 0 ? `予定より ${approx(-diff)} 遅れ` : `予定より ${approx(diff)} 先`;
+}
+
+/** 目安の数: 10 以上は整数、それより小さければ小数第1位まで */
+function approx(n: number): number {
+  return n >= 10 ? Math.round(n) : Math.round(n * 10) / 10;
+}
+
+function ceilApprox(n: number): number {
+  return n >= 10 ? Math.ceil(n) : Math.ceil(n * 10) / 10;
 }

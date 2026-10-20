@@ -72,7 +72,7 @@ describe('進み具合（期限までの総量）', () => {
   it('日割りの予定と比べたペース・残りを1日あたりに', () => {
     // 10/1〜10/30 の30日で 300 → 10/20 までに 200 済んでいたい
     const p = goalProgress(book, [{ date: '2026-10-05', amount: 150 }, { date: '2026-09-30', amount: 99 }], '2026-10-20');
-    expect([p.sum, p.expected, p.daysLeft, p.perDay]).toEqual([150, 200, 11, 13.64]);
+    expect([p.sum, p.expected, p.daysLeft, p.perDay]).toEqual([150, 200, 11, 14]);
     expect(progressText(book, p)).toBe('150/300ページ（予定より 50 遅れ）');
     expect(goalRuleText(book)).toBe('10/30 までに 300ページ');
     const done = goalProgress(book, [{ date: '2026-10-05', amount: 300 }], '2026-10-20');
